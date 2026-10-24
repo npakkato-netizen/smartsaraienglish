@@ -1,0 +1,6 @@
+{
+  "name": "Smart Sarai English",
+  "description": "สมาร์ท สาหร่าย อิงลิช – เด็กสาหร่ายยุคใหม่ เก่งอังกฤษแบบสมาร์ท",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

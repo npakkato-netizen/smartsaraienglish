@@ -1,0 +1,232 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Nunito', 'Mitr', sans-serif;
+  }
+}
+
+.font-bubble {
+  font-family: 'Fredoka', 'Mitr', sans-serif;
+}
+
+.font-thai {
+  font-family: 'Mitr', 'Nunito', sans-serif;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+
+.animate-shake {
+  animation: shake 0.4s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+/* Hide scrollbar for clean tab browsing */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Standard Paper Sizes for Printing (A4 and A5) */
+@page {
+  size: A4 portrait;
+  margin: 6mm 8mm;
+}
+
+@page a4-sheet {
+  size: A4 portrait;
+  margin: 6mm 8mm;
+}
+
+@page a5-sheet {
+  size: A5 portrait;
+  margin: 4mm 6mm;
+}
+
+@media print {
+  *,
+  *::before,
+  *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  #root,
+  #root > div {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Hide app chrome, navbar, main container, settings, floating controls */
+  header,
+  footer,
+  nav,
+  main,
+  button,
+  .print\:hidden {
+    display: none !important;
+  }
+
+  .avoid-break {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Unconstrain all modal wrappers so every A4 page prints completely */
+  .phonics-print-modal-container,
+  .phonics-print-dialog-card,
+  .phonics-print-scroll-area,
+  .printable-area {
+    position: static !important;
+    inset: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    left: auto !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    pointer-events: auto !important;
+  }
+
+  .phonics-zoom-wrapper {
+    transform: none !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: block !important;
+  }
+
+  #phonics-printable-document {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+
+  .paper-size-a4,
+  .phonics-a4-page {
+    position: relative !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 278mm !important;
+    min-height: 275mm !important;
+    max-height: 280mm !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    padding: 5mm 6mm !important;
+    margin: 0 !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    box-sizing: border-box !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    overflow: visible !important;
+  }
+
+  .paper-size-a5,
+  .phonics-a5-page {
+    position: relative !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 195mm !important;
+    min-height: 192mm !important;
+    max-height: 198mm !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    padding: 3mm 5mm !important;
+    margin: 0 !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    box-sizing: border-box !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    overflow: visible !important;
+  }
+
+  .phonics-a4-page.hidden,
+  .phonics-a5-page.hidden {
+    display: flex !important;
+  }
+
+  /* When printing all pages */
+  #phonics-printable-document[data-print-scope="all"] .phonics-a4-page,
+  #phonics-printable-document[data-print-scope="all"] .phonics-a5-page,
+  #phonics-printable-document:not([data-print-scope="current"]) .phonics-a4-page,
+  #phonics-printable-document:not([data-print-scope="current"]) .phonics-a5-page {
+    display: flex !important;
+  }
+
+  /* When printing only the current page */
+  #phonics-printable-document[data-print-scope="current"] .phonics-a4-page:not([data-page-active="true"]),
+  #phonics-printable-document[data-print-scope="current"] .phonics-a5-page:not([data-page-active="true"]) {
+    display: none !important;
+  }
+
+  .phonics-a4-page:last-child,
+  .phonics-a5-page:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+}
