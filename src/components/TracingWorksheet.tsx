@@ -1,7 +1,8 @@
 import React from 'react';
 import { PhonicsWord } from '../types/phonics';
 import { VOWEL_INFO_MAP } from '../data/phonicsData';
-import { PenTool, Sparkles } from 'lucide-react';
+import { GRADE_BADGES, SecondaryGrade, VocabTopic } from '../data/secondaryVocabData';
+import { PenTool, Sparkles, GraduationCap } from 'lucide-react';
 
 export type HandwritingFontType = 'fredoka' | 'school' | 'nunito';
 
@@ -92,12 +93,31 @@ export const PenmanshipTracingLine: React.FC<{
   const tracingFont = getTracingFontFamily(fontType);
   const modelFont = getModelFontFamily(fontType);
 
-  // Dynamic font size tuning
-  const fontSize = word.length >= 6 ? 38 : word.length >= 5 ? 41 : 45;
-  const letterSpacing = word.length >= 6 ? 1.5 : 2.5;
+  const wordLen = word.length;
 
-  const totalSlots = repeatCount + (showModelWord ? 1 : 0);
+  // Intelligently cap repetitions based on word length so long words (M.1 - M.6) never collide
+  const maxAllowedSlots =
+    wordLen >= 12 ? 2 :
+    wordLen >= 9 ? 3 :
+    wordLen >= 6 ? 4 : 5;
+
+  const effectiveRepeat = Math.max(1, Math.min(repeatCount, maxAllowedSlots - (showModelWord ? 1 : 0)));
+  const totalSlots = effectiveRepeat + (showModelWord ? 1 : 0);
   const slotWidth = (customWidth - 36) / Math.max(1, totalSlots);
+
+  // Dynamic font size and spacing calibrated for primary and secondary vocabularies
+  const fontSize =
+    wordLen >= 13 ? 24 :
+    wordLen >= 10 ? 28 :
+    wordLen >= 8 ? 32 :
+    wordLen >= 6 ? 37 :
+    wordLen >= 5 ? 41 : 45;
+
+  const letterSpacing =
+    wordLen >= 11 ? 0.6 :
+    wordLen >= 8 ? 1.0 :
+    wordLen >= 6 ? 1.5 : 2.2;
+
   const isTall = hasTallFirstLetter(word);
 
   return (
@@ -212,7 +232,7 @@ export const PenmanshipTracingLine: React.FC<{
         )}
 
         {/* 2. Dotted Tracing Words (คำเส้นประเดี่ยว: ฟอนต์ Fredoka ชนิดเดียวกับคำศัพท์) */}
-        {Array.from({ length: repeatCount }).map((_, idx) => {
+        {Array.from({ length: effectiveRepeat }).map((_, idx) => {
           const startX = (showModelWord ? slotWidth : 0) + idx * slotWidth + 24;
           const startDotY = isTall ? 19 : 34;
 
@@ -608,6 +628,14 @@ export const TracingExerciseCard: React.FC<{
   const isA5 = paperSize === 'a5';
   const wordLen = word.word.length;
 
+  // Secondary vocabulary metadata detection
+  const isSec = !!(word as any).isSecondary || !!(word as any).secondaryGrade;
+  const secGrade = (word as any).secondaryGrade as SecondaryGrade | undefined;
+  const secPos = (word as any).secondaryPos || word.pattern;
+  const secTopic = (word as any).secondaryTopic as VocabTopic | undefined;
+  const secSynonyms = (word as any).secondarySynonyms as string[] | undefined;
+  const secBadge = secGrade ? GRADE_BADGES[secGrade] : undefined;
+
   const letters = word.letters && word.letters.length > 0
     ? word.letters
     : word.word.split('').map((char) => ({
@@ -618,29 +646,54 @@ export const TracingExerciseCard: React.FC<{
 
   // Expand repetitions to fill the full wide line edge-to-edge
   const repeatCount = isA5
-    ? (wordLen <= 3 ? 3 : 2)
-    : (wordLen <= 3 ? 6 : wordLen === 4 ? 5 : 4);
+    ? (wordLen >= 9 ? 1 : wordLen >= 6 ? 2 : 3)
+    : (wordLen >= 12 ? 1 : wordLen >= 9 ? 2 : wordLen >= 6 ? 3 : wordLen >= 4 ? 4 : 5);
   const totalSlots = repeatCount + 1; // 1 model word + repeatCount tracing repetitions
 
   return (
     <div className="border border-slate-300 rounded-xl p-2 sm:p-2.5 bg-white avoid-break shadow-2xs hover:border-black transition w-full">
       <div className="flex flex-row items-stretch gap-2 sm:gap-2.5">
         {/* Left Column: คำศัพท์ต้นแบบด้านซ้าย (Model Vocabulary Card on the Left) */}
-        <div className="w-28 sm:w-32 shrink-0 bg-slate-50/90 rounded-xl p-2 border border-slate-200 flex flex-col justify-between text-center">
+        <div className="w-28 sm:w-34 shrink-0 bg-slate-50/90 rounded-xl p-2 border border-slate-200 flex flex-col justify-between text-center">
           <div>
-            <div className="flex items-center justify-between text-[9px] font-bold text-slate-700 mb-0.5">
-              <span className={`px-1 py-0.2 rounded font-thai border ${
-                isBw ? 'bg-slate-200 text-black border-slate-400' : 'bg-amber-100 text-amber-900 border-amber-300'
-              }`}>
-                {vowelInfo?.name || word.vowel}
-              </span>
-              <span className="font-mono text-slate-800 font-bold bg-white px-1 py-0.2 rounded border border-slate-300">
-                {word.family}
-              </span>
+            <div className="flex items-center justify-between text-[9px] font-bold text-slate-700 mb-0.5 gap-1">
+              {isSec ? (
+                <>
+                  <span
+                    className={`px-1.5 py-0.5 rounded font-bold text-[8.5px] border ${
+                      isBw
+                        ? 'bg-slate-200 text-black border-slate-400'
+                        : secBadge
+                        ? `${secBadge.bg} ${secBadge.color}`
+                        : 'bg-amber-100 text-amber-900 border-amber-300'
+                    }`}
+                  >
+                    {secGrade || 'ม.1-6'}
+                  </span>
+                  <span className="font-mono text-slate-800 font-bold bg-white px-1 py-0.2 rounded border border-slate-300 text-[8.5px]">
+                    [{secPos || 'n.'}]
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span
+                    className={`px-1 py-0.2 rounded font-thai border ${
+                      isBw
+                        ? 'bg-slate-200 text-black border-slate-400'
+                        : 'bg-amber-100 text-amber-900 border-amber-300'
+                    }`}
+                  >
+                    {vowelInfo?.name || word.vowel}
+                  </span>
+                  <span className="font-mono text-slate-800 font-bold bg-white px-1 py-0.2 rounded border border-slate-300">
+                    {word.family}
+                  </span>
+                </>
+              )}
             </div>
 
             <div className="my-0.5">
-              <span className="text-3xl block leading-none select-none">{word.emoji}</span>
+              <span className="text-3xl block leading-none select-none">{word.emoji || (isSec ? '📖' : '🦁')}</span>
               <div className="font-bubble text-xl sm:text-2xl font-black text-slate-900 tracking-wide mt-0.5">
                 {word.word}
               </div>
@@ -649,36 +702,54 @@ export const TracingExerciseCard: React.FC<{
             {showPhonetic && (
               <div className="text-[10px] font-bold text-slate-800 font-thai leading-tight">
                 อ่านว่า: <span className={isBw ? 'text-black underline' : 'text-amber-800'}>{word.phoneticTh}</span>
-                <span className="font-mono text-[9px] text-slate-500 ml-0.5">/{word.phoneticIPA}/</span>
+                <span className="font-mono text-[8.5px] text-slate-500 ml-0.5">/{word.phoneticIPA}/</span>
               </div>
             )}
 
             {showMeaning && (
-              <div className="text-[10px] font-bold text-slate-900 font-thai mt-0.5 truncate">
+              <div className="text-[10px] font-bold text-slate-900 font-thai mt-0.5 line-clamp-2">
                 {word.meaningTh}
               </div>
             )}
 
-            {/* Phonics Sound Breakdown Chips */}
-            <div className="mt-1 pt-1 border-t border-slate-200 flex items-center justify-center gap-0.5 flex-wrap">
-              {letters.map((seg, sIdx) => (
-                <span
-                  key={sIdx}
-                  className="inline-flex items-center gap-0.5 bg-white border border-slate-300 rounded px-1 py-0.2 text-[8.5px] font-mono shadow-2xs"
-                  title={`${seg.letter} = ${seg.soundTh}`}
-                >
-                  <strong className="text-slate-900 font-black">{seg.letter}</strong>
-                  <span className="text-slate-500 text-[7.5px] font-thai">/{seg.soundTh}/</span>
-                </span>
-              ))}
-            </div>
+            {/* Phonics Sound Breakdown Chips (Only for Primary Phonics) */}
+            {!isSec && (
+              <div className="mt-1 pt-1 border-t border-slate-200 flex items-center justify-center gap-0.5 flex-wrap">
+                {letters.map((seg, sIdx) => (
+                  <span
+                    key={sIdx}
+                    className="inline-flex items-center gap-0.5 bg-white border border-slate-300 rounded px-1 py-0.2 text-[8.5px] font-mono shadow-2xs"
+                    title={`${seg.letter} = ${seg.soundTh}`}
+                  >
+                    <strong className="text-slate-900 font-black">{seg.letter}</strong>
+                    <span className="text-slate-500 text-[7.5px] font-thai">/{seg.soundTh}/</span>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Secondary Topic & Synonyms Badge (For Secondary M.1 - M.6) */}
+            {isSec && (
+              <div className="mt-1 pt-1 border-t border-slate-200 text-left space-y-0.5">
+                {secTopic && (
+                  <div className="text-[8px] font-thai text-slate-500 truncate" title={secTopic}>
+                    หมวด: {secTopic}
+                  </div>
+                )}
+                {secSynonyms && secSynonyms.length > 0 && (
+                  <div className="text-[8px] font-thai text-slate-600 truncate" title={secSynonyms.join(', ')}>
+                    เหมือน: {secSynonyms.slice(0, 2).join(', ')}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Student Self-Check Checkboxes */}
           <div className="mt-1 pt-1 border-t border-slate-200 grid grid-cols-3 gap-0.5 text-[8px] text-slate-600 font-thai">
             <label className="flex flex-col items-center cursor-pointer">
               <input type="checkbox" className="rounded text-black scale-75 cursor-pointer" />
-              <span>อ่านได้</span>
+              <span>{isSec ? 'จำศัพท์' : 'อ่านได้'}</span>
             </label>
             <label className="flex flex-col items-center cursor-pointer">
               <input type="checkbox" className="rounded text-black scale-75 cursor-pointer" />
@@ -686,7 +757,7 @@ export const TracingExerciseCard: React.FC<{
             </label>
             <label className="flex flex-col items-center cursor-pointer">
               <input type="checkbox" className="rounded text-black scale-75 cursor-pointer" />
-              <span>จำได้</span>
+              <span>{isSec ? 'แต่งประโยค' : 'จำได้'}</span>
             </label>
           </div>
         </div>
@@ -716,6 +787,14 @@ export const TracingExerciseCard: React.FC<{
               customWidth={880}
             />
           </div>
+
+          {/* Optional: Example Sentence Display for Secondary Words */}
+          {isSec && word.sentence && (
+            <div className="text-[9.5px] text-slate-600 font-thai italic truncate bg-slate-50/80 px-2 py-0.5 rounded border border-slate-200">
+              <strong className="font-semibold text-slate-700 not-italic">ตัวอย่างประโยค: </strong>
+              &ldquo;{word.sentence}&rdquo; {word.sentenceTh ? `(${word.sentenceTh})` : ''}
+            </div>
+          )}
 
           {/* Step 2: BlankHandwritingPracticeLine */}
           <div>
@@ -764,6 +843,9 @@ export const TracingWorksheet: React.FC<TracingWorksheetProps> = ({
     <>
       {pages.map((pageWords, pageIdx) => {
         const isHiddenOnScreen = viewMode === 'single' && pageIdx !== currentPageIndex;
+        const firstWord = pageWords[0] || pages[0]?.[0];
+        const isSecondaryPage = !!(firstWord as any)?.isSecondary || !!(firstWord as any)?.secondaryGrade;
+        const pageGrade = (firstWord as any)?.secondaryGrade as SecondaryGrade | undefined;
 
         return (
           <div
@@ -784,14 +866,20 @@ export const TracingWorksheet: React.FC<TracingWorksheetProps> = ({
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2.5">
                     <div className="w-10 h-10 bg-black rounded-xl flex items-center justify-center text-white text-xl shadow-xs shrink-0">
-                      ✏️
+                      {isSecondaryPage ? '🎓' : '✏️'}
                     </div>
                     <div>
                       <h1 className="font-bubble text-xl sm:text-2xl font-black text-black leading-tight">
-                        แบบฝึกหัดเขียนตามรอยประ (Phonics Word Tracing)
+                        {isSecondaryPage
+                          ? 'ใบงานฝึกคัดคำศัพท์ภาษาอังกฤษ ม.1 - ม.6 (Secondary Word Handwriting)'
+                          : 'แบบฝึกหัดเขียนตามรอยประ (Phonics Word Tracing)'}
                       </h1>
                       <p className="text-xs text-slate-600 font-thai">
-                        ฝึกคัดลายมือตามรอยประ ตัวหนังสือชนิดเดียวกับคำศัพท์ (Fredoka) เส้นเดี่ยว บรรทัดขาวดำ 4 เส้น ({paperSize.toUpperCase()})
+                        {isSecondaryPage
+                          ? `ฝึกคัดลายมือคำศัพท์มาตรฐานหลักสูตรแกนกลาง สพฐ. ${
+                              pageGrade ? `ระดับชั้น ${pageGrade}` : 'ระดับชั้น ม.1 - ม.6'
+                            } บรรทัด 4 เส้น (${paperSize.toUpperCase()})`
+                          : `ฝึกคัดลายมือตามรอยประ ตัวหนังสือชนิดเดียวกับคำศัพท์ (Fredoka) เส้นเดี่ยว บรรทัดขาวดำ 4 เส้น (${paperSize.toUpperCase()})`}
                       </p>
                     </div>
                   </div>
@@ -861,7 +949,9 @@ export const TracingWorksheet: React.FC<TracingWorksheetProps> = ({
               <div className="flex items-center gap-1.5">
                 <Sparkles className="w-3 h-3 text-slate-700" />
                 <span>
-                  Phonics Kids — ใบงานคัดลายมือตัวอักษรเดียวกับคำศัพท์ เส้นเดี่ยว บรรทัดขาวดำ 4 เส้น {paperSize.toUpperCase()}
+                  {isSecondaryPage
+                    ? `Smart Sarai English — ใบงานฝึกคัดคำศัพท์ภาษาอังกฤษ ม.1 - ม.6 หลักสูตรแกนกลาง สพฐ. ${paperSize.toUpperCase()}`
+                    : `Phonics Kids — ใบงานคัดลายมือตัวอักษรเดียวกับคำศัพท์ เส้นเดี่ยว บรรทัดขาวดำ 4 เส้น ${paperSize.toUpperCase()}`}
                 </span>
               </div>
               <div className="font-bold text-slate-800">

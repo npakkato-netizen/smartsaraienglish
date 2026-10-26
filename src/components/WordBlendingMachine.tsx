@@ -4,10 +4,12 @@ import { PHONICS_WORDS, LETTER_PHONICS_MAP } from '../data/phonicsData';
 import {
   speakText,
   playPhonicsSound,
+  playPhonicsSoundAsync,
   speakLetterPhoneme,
   playSparkleSound,
   playCorrectSound,
   playPopSound,
+  playLetterClickSound,
   unlockAudio,
   stopSpeaking,
   speakThaiPhonicsCoachWord,
@@ -129,44 +131,68 @@ export const WordBlendingMachine: React.FC<WordBlendingMachineProps> = ({
     return PHONICS_WORDS.find((w) => w.word.toLowerCase() === currentCombined);
   }, [currentCombined]);
 
-  // Authentic Phonics Blending Action
+  // Authentic Phonics Blending Action (Calibrated with patient pacing for beginner learners)
   const handleBlendAction = async () => {
     if (isBlending) return;
     unlockAudio();
     setIsBlending(true);
     stopSpeaking();
-    await new Promise((r) => setTimeout(r, 60));
+    await new Promise((r) => setTimeout(r, 80));
+
+    // Beginner pacing: deliberate enunciation (~0.74x) with ~620ms breathing gap between sounds
+    const effectiveRate = Math.min(speedRate || 0.74, 0.76);
+    const pauseBetween = Math.max(450, Math.round(920 - (speedRate || 0.74) * 420));
 
     // Step 1: Onset Consonant Phoneme
     setActiveColumn(1);
-    playPopSound();
-    await speakLetterPhoneme(selectedOnset, speedRate);
-    await new Promise((r) => setTimeout(r, 380));
+    playLetterClickSound();
+    await playPhonicsSoundAsync(selectedOnset, effectiveRate);
+    await new Promise((r) => setTimeout(r, pauseBetween));
 
     // Step 2: Vowel / Diphthong Phoneme
     setActiveColumn(2);
-    playPopSound();
-    if (currentVowelOpt.soundTh === 'อุ') {
-      playPhonicsSound('oo_short', speedRate);
+    playLetterClickSound();
+    let vowelKey = currentVowelOpt.id;
+    if (currentVowelOpt.isMagicE) {
+      vowelKey =
+        currentVowelOpt.id === 'a_e'
+          ? 'long-a'
+          : currentVowelOpt.id === 'i_e'
+          ? 'long-i'
+          : currentVowelOpt.id === 'o_e'
+          ? 'long-o'
+          : 'long-u';
+    } else if (currentVowelOpt.soundTh === 'อุ') {
+      vowelKey = 'oo_short';
     } else if (currentVowelOpt.soundTh === 'อู') {
-      playPhonicsSound('oo_long', speedRate);
-    } else {
-      playPhonicsSound(currentVowelOpt.soundTh, speedRate);
+      vowelKey = 'oo_long';
+    } else if (currentVowelOpt.id === 'ai' || currentVowelOpt.id === 'ay') {
+      vowelKey = 'long-a';
+    } else if (currentVowelOpt.id === 'ee' || currentVowelOpt.id === 'ea') {
+      vowelKey = 'long-e';
+    } else if (currentVowelOpt.id === 'igh') {
+      vowelKey = 'long-i';
+    } else if (currentVowelOpt.id === 'oa') {
+      vowelKey = 'long-o';
     }
-    await new Promise((r) => setTimeout(r, 450));
+    await playPhonicsSoundAsync(vowelKey, effectiveRate);
+    await new Promise((r) => setTimeout(r, pauseBetween));
 
     // Step 3: Coda / Ending (if applicable)
     if (selectedCoda !== 'none' && selectedCoda !== '') {
       setActiveColumn(3);
-      playPopSound();
-      playPhonicsSound(selectedCoda, speedRate);
-      await new Promise((r) => setTimeout(r, 380));
+      playLetterClickSound();
+      await playPhonicsSoundAsync(selectedCoda, effectiveRate);
+      await new Promise((r) => setTimeout(r, pauseBetween));
     }
 
-    // Step 4: Blend all together into the full English word!
+    // Step 4: Golden Blend Pause & Announce Full Word!
     setActiveColumn(null);
+    await new Promise((r) => setTimeout(r, 680));
+
     playSparkleSound();
-    await speakText(currentCombined, { rate: speedRate, pitch: 1.05 });
+    await speakText(currentCombined, { rate: Math.min(speedRate, 0.80), pitch: 1.05 });
+    await new Promise((r) => setTimeout(r, 450));
 
     if (matchedWord) {
       playCorrectSound();
@@ -415,9 +441,23 @@ export const WordBlendingMachine: React.FC<WordBlendingMachineProps> = ({
                   key={v.id}
                   onClick={() => {
                     setSelectedVowelId(v.id);
-                    if (v.soundTh === 'อุ') playPhonicsSound('oo_short', speedRate);
-                    else if (v.soundTh === 'อู') playPhonicsSound('oo_long', speedRate);
-                    else playPhonicsSound(v.soundTh, speedRate);
+                    let k = v.id;
+                    if (v.isMagicE) {
+                      k = v.id === 'a_e' ? 'long-a' : v.id === 'i_e' ? 'long-i' : v.id === 'o_e' ? 'long-o' : 'long-u';
+                    } else if (v.soundTh === 'อุ') {
+                      k = 'oo_short';
+                    } else if (v.soundTh === 'อู') {
+                      k = 'oo_long';
+                    } else if (v.id === 'ai' || v.id === 'ay') {
+                      k = 'long-a';
+                    } else if (v.id === 'ee' || v.id === 'ea') {
+                      k = 'long-e';
+                    } else if (v.id === 'igh') {
+                      k = 'long-i';
+                    } else if (v.id === 'oa') {
+                      k = 'long-o';
+                    }
+                    playPhonicsSound(k, speedRate);
                   }}
                   className={`py-1 px-2 rounded-lg font-bubble font-bold text-xs flex items-center justify-between transition ${
                     selectedVowelId === v.id
@@ -488,8 +528,11 @@ export const WordBlendingMachine: React.FC<WordBlendingMachineProps> = ({
             }`}
           >
             <Sparkles className="w-6 h-6" />
-            <span>{isBlending ? 'กำลังผสมเสียงตามหลักโฟนิกส์...' : `ผสมเสียง: ${currentCombined.toUpperCase()}!`}</span>
+            <span>{isBlending ? 'กำลังผสมเสียงทีละตัวอย่างช้าๆ...' : `ผสมเสียง: ${currentCombined.toUpperCase()}!`}</span>
           </button>
+          <div className="text-xs text-amber-900 font-bold mt-2.5 flex items-center gap-1.5 bg-amber-50 px-3 py-1 rounded-full border border-amber-200 shadow-2xs">
+            <span>🐢 จังหวะช้าชัดเจน เหมาะสำหรับนักเรียนเริ่มเรียน (ฟังพยัญชนะชัดเต็มเสียง)</span>
+          </div>
         </div>
 
         {/* Real Word Discovery Card */}

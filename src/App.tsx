@@ -30,7 +30,7 @@ import { ScoreDashboardModal } from './components/ScoreDashboardModal';
 import { LoginPage } from './components/LoginPage';
 import { StudentProfile } from './types/student';
 import { getCurrentStudent } from './services/gasService';
-import { PhonicsVoiceMode, unlockAudio } from './utils/audioUtils';
+import { PhonicsVoiceMode, unlockAudio, setAudioEngineConfig } from './utils/audioUtils';
 import { Sparkles, Trophy, Puzzle, HelpCircle, Shuffle, Volume2, Mic, BookOpen, Star, Settings2, CheckCircle2, Printer, PenTool, User, FileSpreadsheet } from 'lucide-react';
 
 const STATS_STORAGE_KEY = 'phonics_kids_stats_v1';
@@ -103,15 +103,16 @@ export default function App() {
       quizzesCompleted: 0,
       spellingScore: 0,
       badges: ['first-word'],
-      speedRate: 0.85,
+      speedRate: 0.74, // Beginner-friendly pace (ช้า ชัดเจน สำหรับนักเรียนเริ่มเรียน)
     };
   });
 
-  // Save audio settings
+  // Save audio settings & sync engine config
   useEffect(() => {
     try {
       localStorage.setItem(AUDIO_SETTINGS_KEY, JSON.stringify({ voiceMode, voiceURI: preferredVoiceURI }));
     } catch {}
+    setAudioEngineConfig({ voiceMode, preferredVoiceURI });
   }, [voiceMode, preferredVoiceURI]);
 
   // Save stats to localStorage
@@ -261,13 +262,14 @@ export default function App() {
     setIsPrintModalOpen(true);
   };
 
-  const handlePrintSecondaryWord = (word: SecondaryVocabWord) => {
+  const handlePrintSecondaryWord = (word: SecondaryVocabWord, template?: PrintTemplate) => {
     setPrintSource('secondary');
     setPrintSecondaryWord(word);
     setPrintSecondaryGrade(word.grade);
     setPrintSecondaryTopic(word.topic);
     setPrintSecondaryWords(undefined);
     setPrintTargetWord(undefined);
+    if (template) setPrintTargetTemplate(template);
     setIsPrintModalOpen(true);
   };
 
@@ -291,6 +293,9 @@ export default function App() {
             setPrintTargetWord(undefined);
             setPrintTargetVowel(selectedVowel);
             setIsPrintModalOpen(true);
+          }}
+          onOpenSecondaryWorksheet={() => {
+            handleOpenPrintSecondary({ template: 'tracing' });
           }}
           onToggleSpeed={handleToggleSpeed}
           onOpenStudentLogin={() => {
@@ -339,7 +344,7 @@ export default function App() {
                 <span className="font-extrabold text-slate-800">โหมดเสียงอ่านโฟนิกส์:</span>
                 <span className="font-bold text-amber-700 bg-amber-100 px-2.5 py-0.5 rounded-full text-xs">
                   {voiceMode === 'sound'
-                    ? '🇺🇸 เสียงโฟนิกส์สากล (/k/ - /æ/ - /t/)'
+                    ? '🇺🇸 เสียงโฟนิกส์แท้ เจ้าของภาษา (/k/ - /æ/ - /t/)'
                     : voiceMode === 'anchor'
                     ? '💡 คำเทียบจำง่าย (a in apple, c in cat)'
                     : '🇹🇭 ครูไทยสอนผสมเสียง (เคอะ-แอะ-เทอะ)'}
@@ -350,29 +355,29 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setVoiceMode('sound')}
-                  className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
+                  className={`px-3 py-1 rounded-xl text-xs font-bold transition cursor-pointer ${
                     voiceMode === 'sound'
                       ? 'bg-amber-500 text-white shadow-2xs'
                       : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                   }`}
                 >
-                  เสียงโฟนิกส์
+                  🇺🇸 โฟนิกส์แท้
                 </button>
                 <button
                   type="button"
                   onClick={() => setVoiceMode('anchor')}
-                  className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
+                  className={`px-3 py-1 rounded-xl text-xs font-bold transition cursor-pointer ${
                     voiceMode === 'anchor'
                       ? 'bg-amber-500 text-white shadow-2xs'
                       : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                   }`}
                 >
-                  คำเทียบ
+                  💡 คำเทียบ
                 </button>
                 <button
                   type="button"
                   onClick={() => setVoiceMode('thai')}
-                  className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
+                  className={`px-3 py-1 rounded-xl text-xs font-bold transition cursor-pointer ${
                     voiceMode === 'thai'
                       ? 'bg-purple-600 text-white shadow-2xs'
                       : 'bg-slate-100 text-slate-700 hover:bg-slate-200'

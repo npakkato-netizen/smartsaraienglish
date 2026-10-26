@@ -20,6 +20,7 @@ import {
   ChevronUp,
   ChevronDown,
   Menu,
+  PenTool,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -31,6 +32,7 @@ interface NavbarProps {
   onOpenAudioSettings: () => void;
   onOpenPhonicsChart: () => void;
   onOpenPrintCenter?: () => void;
+  onOpenSecondaryWorksheet?: () => void;
   onToggleSpeed: () => void;
   onOpenStudentLogin: () => void;
   onOpenScoreDashboard: () => void;
@@ -47,6 +49,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAudioSettings,
   onOpenPhonicsChart,
   onOpenPrintCenter,
+  onOpenSecondaryWorksheet,
   onToggleSpeed,
   onOpenStudentLogin,
   onOpenScoreDashboard,
@@ -207,6 +210,19 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Right: Quick Tools + Expand Button */}
           <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Quick Worksheet Shortcut */}
+            {onOpenSecondaryWorksheet && (
+              <button
+                type="button"
+                onClick={onOpenSecondaryWorksheet}
+                title="สร้างและพิมพ์ใบงานฝึกคัดคำศัพท์ ม.1 - ม.6 (เส้นประ 4 เส้นมาตรฐาน A4)"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 hover:from-amber-600 hover:to-rose-600 text-white font-black text-xs shadow-2xs transition active:scale-95 cursor-pointer"
+              >
+                <PenTool className="w-3.5 h-3.5 text-white shrink-0" />
+                <span className="text-[11px] font-bold hidden sm:inline">ใบงานคัด ม.1-6</span>
+              </button>
+            )}
+
             {/* Quick Speed */}
             <button
               type="button"
@@ -305,6 +321,20 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Right Action Tools: Utility buttons + Student Profile Card */}
           <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+
+            {/* Secondary Tracing Worksheet Direct Action */}
+            {onOpenSecondaryWorksheet && (
+              <button
+                type="button"
+                onClick={onOpenSecondaryWorksheet}
+                title="สร้างและพิมพ์ใบงานฝึกคัดคำศัพท์ ม.1 - ม.6 (แบบเส้นประ 4 เส้นมาตรฐาน A4 พร้อมบริบทและคำแปล)"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 hover:from-amber-600 hover:to-rose-600 text-white font-black text-xs shadow-sm shadow-amber-300/40 transition active:scale-95 cursor-pointer ring-1 ring-amber-300"
+              >
+                <PenTool className="w-3.5 h-3.5 text-white shrink-0" />
+                <span className="hidden xl:inline">📝 ใบงานฝึกคัด ม.1-6</span>
+                <span className="xl:hidden">📝 ใบงานคัด</span>
+              </button>
+            )}
 
             {/* A-Z Phonics Chart */}
             <button

@@ -34,7 +34,7 @@ export const ALPHABET_26 = [
   { upper: 'W', lower: 'w', ipa: '/w/', thai: 'วึ', isVowel: false },
   { upper: 'X', lower: 'x', ipa: '/ks/', thai: 'คสึ', isVowel: false },
   { upper: 'Y', lower: 'y', ipa: '/j/', thai: 'ยึ', isVowel: false },
-  { upper: 'Z', lower: 'z', ipa: '/z/', thai: 'ซึ', isVowel: false },
+  { upper: 'Z', lower: 'z', ipa: '/z/', thai: 'ซึ (สั่น)', isVowel: false },
 ];
 
 export const LONG_VOWEL_CHART = [

@@ -194,7 +194,7 @@ export const HomePage: React.FC<HomePageProps> = ({
           <span className="font-extrabold text-slate-800">โหมดเสียงอ่านโฟนิกส์:</span>
           <span className="font-bold text-amber-700 bg-amber-100 px-2.5 py-0.5 rounded-full text-xs">
             {voiceMode === 'sound'
-              ? '🇺🇸 เสียงโฟนิกส์สากล (/k/ - /æ/ - /t/)'
+              ? '🇺🇸 เสียงโฟนิกส์แท้ เจ้าของภาษา (/k/ - /æ/ - /t/)'
               : voiceMode === 'anchor'
               ? '💡 คำเทียบจำง่าย (a in apple, c in cat)'
               : '🇹🇭 ครูไทยสอนผสมเสียง (เคอะ-แอะ-เทอะ)'}
@@ -211,7 +211,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
-            เสียงโฟนิกส์
+            🇺🇸 โฟนิกส์แท้
           </button>
           <button
             type="button"
@@ -222,7 +222,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
-            คำเทียบ
+            💡 คำเทียบ
           </button>
           <button
             type="button"

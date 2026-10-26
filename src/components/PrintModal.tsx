@@ -138,7 +138,7 @@ export const PrintModal: React.FC<PrintModalProps> = ({
   const [paperSize, setPaperSize] = useState<'a4' | 'a5'>('a4');
 
   // Template and Filter states
-  const [template, setTemplate] = useState<PrintTemplate>('flashcards');
+  const [template, setTemplate] = useState<PrintTemplate>(initialTemplate || 'flashcards');
   const [selectedCategory, setSelectedCategory] = useState<VowelCategory | 'all'>(
     initialCategory || (initialWord?.vowelCategory ? initialWord.vowelCategory : 'all')
   );

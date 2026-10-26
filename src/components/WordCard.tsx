@@ -54,7 +54,9 @@ export const WordCard: React.FC<WordCardProps> = ({
     await soundOutAndBlendWord(
       word,
       (indices) => setActiveStepIndices(indices || []),
-      speedRate
+      speedRate,
+      voiceMode,
+      preferredVoiceURI
     );
     setIsBlending(false);
     setActiveStepIndices([]);
@@ -87,7 +89,7 @@ export const WordCard: React.FC<WordCardProps> = ({
         );
         setActiveStepIndices(vIdx !== -1 ? [vIdx, magicEIndex] : [magicEIndex]);
         playSparkleSound();
-        playPhonicsSound(word.vowel, speedRate);
+        playPhonicsSound(word.vowel, speedRate, preferredVoiceURI, voiceMode);
         setTimeout(() => setActiveStepIndices([]), 550);
         return;
       }
@@ -96,7 +98,7 @@ export const WordCard: React.FC<WordCardProps> = ({
       if (['เอ', 'อี', 'ไอ', 'โอ', 'ยู', 'อู'].includes(seg.soundTh)) {
         setActiveStepIndices([index, magicEIndex]);
         playLetterClickSound();
-        playPhonicsSound(word.vowel, speedRate);
+        playPhonicsSound(word.vowel, speedRate, preferredVoiceURI, voiceMode);
         setTimeout(() => setActiveStepIndices([]), 550);
         return;
       }
@@ -106,16 +108,16 @@ export const WordCard: React.FC<WordCardProps> = ({
     playLetterClickSound();
 
     // Diphthong / Vowel Team / Consonant
-    if (seg.soundTh && ['เอ', 'อี', 'ไอ', 'โอ', 'ยู', 'อู', 'อุ', 'ออย', 'เอา', 'แอร์', 'เอีย', 'แอ', 'เอะ', 'อิ', 'เอาะ', 'อะ'].includes(seg.soundTh)) {
+    if (seg.soundTh && ['เอ', 'อี', 'ไอ', 'โอ', 'ยู', 'อู', 'อุ', 'ออย', 'เอา', 'แอร์', 'เอีย', 'แอะ', 'แอ', 'เอะ', 'อิ', 'เอาะ', 'อะ'].includes(seg.soundTh)) {
       if (seg.soundTh === 'อุ') {
-        playPhonicsSound('oo_short', speedRate);
+        playPhonicsSound('oo_short', speedRate, preferredVoiceURI, voiceMode);
       } else if (seg.soundTh === 'อู') {
-        playPhonicsSound('oo_long', speedRate);
+        playPhonicsSound('oo_long', speedRate, preferredVoiceURI, voiceMode);
       } else {
-        playPhonicsSound(seg.soundTh, speedRate);
+        playPhonicsSound(seg.soundTh, speedRate, preferredVoiceURI, voiceMode);
       }
     } else {
-      playPhonicsSound(seg.letter.toLowerCase(), speedRate);
+      playPhonicsSound(seg.letter.toLowerCase(), speedRate, preferredVoiceURI, voiceMode);
     }
 
     setTimeout(() => setActiveStepIndices([]), 450);

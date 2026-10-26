@@ -387,7 +387,7 @@ export const SecondarySpellingGame: React.FC<SecondarySpellingGameProps> = ({
 
         {/* Grade and Topic Filter Strip */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-1 border-t border-slate-100">
-          <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none flex-1">
+          <div className="flex flex-wrap items-center gap-1 sm:gap-1.5 flex-1">
             <span className="text-[11px] font-bold text-slate-400 shrink-0 mr-1 flex items-center gap-1">
               <GraduationCap className="w-3 h-3" /> ชั้น:
             </span>
