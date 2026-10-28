@@ -6,6 +6,7 @@
 
 import { LETTER_PHONICS_MAP } from '../data/phonicsData';
 import { PhonicsWord } from '../types/phonics';
+import { AUTHENTIC_PHONICS_AUDIO } from '../data/authenticPhonicsAudio';
 
 // Shared Web Audio Context with auto-resume
 let audioCtx: AudioContext | null = null;
@@ -209,6 +210,8 @@ const activeUtterances = new Set<SpeechSynthesisUtterance>();
 
 let availableVoices: SpeechSynthesisVoice[] = [];
 let voicesLoaded = false;
+let cachedFemaleTeacherVoice: SpeechSynthesisVoice | null = null;
+let lastTargetKey = '';
 
 export function loadVoices(): Promise<SpeechSynthesisVoice[]> {
   return new Promise((resolve) => {
@@ -219,6 +222,8 @@ export function loadVoices(): Promise<SpeechSynthesisVoice[]> {
 
     const update = () => {
       availableVoices = window.speechSynthesis.getVoices();
+      cachedFemaleTeacherVoice = null;
+      lastTargetKey = '';
       if (availableVoices.length > 0) {
         voicesLoaded = true;
         resolve(availableVoices);
@@ -265,6 +270,8 @@ export function setAudioEngineConfig(config: {
   if (config.preferredVoiceURI !== undefined) currentPreferredVoiceURI = config.preferredVoiceURI;
   if (config.voiceMode !== undefined) currentVoiceMode = config.voiceMode;
   if (config.dialect !== undefined) currentDialect = config.dialect;
+  cachedFemaleTeacherVoice = null;
+  lastTargetKey = '';
 }
 
 export function getAudioEngineConfig() {
@@ -275,6 +282,66 @@ export function getAudioEngineConfig() {
   };
 }
 
+const FEMALE_VOICE_KEYWORDS = [
+  'samantha',
+  'jenny',
+  'ava',
+  'victoria',
+  'karen',
+  'allison',
+  'susan',
+  'zira',
+  'aria',
+  'ana',
+  'sonia',
+  'natasha',
+  'catherine',
+  'fiona',
+  'moira',
+  'tessa',
+  'veena',
+  'hazel',
+  'linda',
+  'serena',
+  'stephanie',
+  'zoe',
+  'female',
+];
+
+const MALE_VOICE_KEYWORDS = [
+  'guy',
+  'daniel',
+  'alex',
+  'oliver',
+  'george',
+  'david',
+  'mark',
+  'james',
+  'ryan',
+  'tom',
+  'brian',
+  'fred',
+  'junior',
+  'ralph',
+  'male',
+];
+
+export function isFemaleVoice(voice: SpeechSynthesisVoice): boolean {
+  const nameLower = voice.name.toLowerCase();
+  // Explicit female label
+  if (nameLower.includes('female')) return true;
+  // Explicit male label (excluding female)
+  if (MALE_VOICE_KEYWORDS.some((m) => nameLower.includes(m)) && !nameLower.includes('female')) {
+    return false;
+  }
+  // Known female names
+  if (FEMALE_VOICE_KEYWORDS.some((f) => nameLower.includes(f))) return true;
+  // Google US English is female by default on Chrome/Chromium
+  if (nameLower.includes('google us english') || nameLower.includes('google uk english female')) {
+    return true;
+  }
+  return false;
+}
 export function getEnglishVoice(
   preferredVoiceURI?: string,
   dialect?: 'en-US' | 'en-GB'
@@ -283,68 +350,138 @@ export function getEnglishVoice(
   if (!voices.length) return null;
 
   const targetURI = preferredVoiceURI || currentPreferredVoiceURI;
-  if (targetURI) {
-    const found = voices.find((v) => v.voiceURI === targetURI);
-    if (found) return found;
+  const targetDialect = dialect || currentDialect || 'en-US';
+  const cacheKey = `${targetURI || 'auto'}_${targetDialect}`;
+
+  // Return cached female teacher voice instance to ensure 100% timbre & voice identity parity across all letters A-Z
+  if (
+    cachedFemaleTeacherVoice &&
+    lastTargetKey === cacheKey &&
+    voices.includes(cachedFemaleTeacherVoice)
+  ) {
+    return cachedFemaleTeacherVoice;
   }
 
-  const targetDialect = dialect || currentDialect || 'en-US';
+  if (targetURI) {
+    const found = voices.find((v) => v.voiceURI === targetURI);
+    if (found) {
+      cachedFemaleTeacherVoice = found;
+      lastTargetKey = cacheKey;
+      return found;
+    }
+  }
 
-  // Priority 1: High quality / Natural / Neural English voices matching preferred dialect
-  const highQualityMatching = voices.find(
-    (v) =>
-      v.lang.toLowerCase().replace('_', '-').startsWith(targetDialect.toLowerCase()) &&
-      (v.name.includes('Natural') ||
-        v.name.includes('Google US English') ||
-        v.name.includes('Google UK English') ||
-        v.name.includes('Samantha') ||
-        v.name.includes('Jenny') ||
-        v.name.includes('Guy') ||
-        v.name.includes('Karen') ||
-        v.name.includes('Daniel') ||
-        v.name.includes('Alex') ||
-        v.name.includes('Oliver') ||
-        v.name.includes('Siri') ||
-        v.name.includes('Victoria') ||
-        v.name.includes('Ava') ||
-        v.name.includes('Allison'))
-  );
-  if (highQualityMatching) return highQualityMatching;
+  // Priority 1: When American English (General American - en-US) is target or default
+  if (targetDialect === 'en-US') {
+    // 1A. High-quality / Neural / Natural American FEMALE voices
+    const usFemaleHQ = voices.find((v) => {
+      const lang = v.lang.toLowerCase().replace('_', '-');
+      if (!lang.startsWith('en-us')) return false;
+      if (!isFemaleVoice(v)) return false;
+      const n = v.name;
+      return (
+        n.includes('Google US English') ||
+        n.includes('Natural') ||
+        n.includes('Samantha') ||
+        n.includes('Jenny') ||
+        n.includes('Aria') ||
+        n.includes('Ava') ||
+        n.includes('Allison') ||
+        n.includes('Victoria') ||
+        n.includes('Susan') ||
+        n.includes('Zira')
+      );
+    });
+    if (usFemaleHQ) {
+      cachedFemaleTeacherVoice = usFemaleHQ;
+      lastTargetKey = cacheKey;
+      return usFemaleHQ;
+    }
 
-  // Priority 2: Any high-quality English voice (US/UK/AU)
-  const highQualityAny = voices.find(
+    // 1B. Any American FEMALE voice (en-US)
+    const usFemaleAny = voices.find((v) => {
+      const lang = v.lang.toLowerCase().replace('_', '-');
+      return lang.startsWith('en-us') && isFemaleVoice(v);
+    });
+    if (usFemaleAny) {
+      cachedFemaleTeacherVoice = usFemaleAny;
+      lastTargetKey = cacheKey;
+      return usFemaleAny;
+    }
+
+    // 1C. Any en-US voice (preserves American pronunciation)
+    const usAny = voices.find((v) => {
+      const lang = v.lang.toLowerCase().replace('_', '-');
+      return lang.startsWith('en-us');
+    });
+    if (usAny) {
+      cachedFemaleTeacherVoice = usAny;
+      lastTargetKey = cacheKey;
+      return usAny;
+    }
+  }
+
+  // Priority 2: For other dialects (e.g. en-GB if explicitly requested)
+  const dialectPrefix = targetDialect.toLowerCase().replace('_', '-');
+  const dialectVoiceHQ = voices.find(
     (v) =>
-      v.lang.toLowerCase().startsWith('en') &&
+      v.lang.toLowerCase().replace('_', '-').startsWith(dialectPrefix) &&
+      isFemaleVoice(v) &&
       (v.name.includes('Natural') ||
         v.name.includes('Google') ||
         v.name.includes('Samantha') ||
         v.name.includes('Jenny') ||
-        v.name.includes('Guy') ||
+        v.name.includes('Ava') ||
+        v.name.includes('Victoria') ||
         v.name.includes('Karen') ||
-        v.name.includes('Daniel') ||
-        v.name.includes('Alex') ||
-        v.name.includes('Oliver') ||
-        v.name.includes('Siri'))
+        v.name.includes('Allison') ||
+        v.name.includes('Zira'))
   );
-  if (highQualityAny) return highQualityAny;
+  if (dialectVoiceHQ) {
+    cachedFemaleTeacherVoice = dialectVoiceHQ;
+    lastTargetKey = cacheKey;
+    return dialectVoiceHQ;
+  }
 
-  // Priority 3: Exact dialect match (e.g. en-US or en-GB)
-  const dialectVoice = voices.find((v) =>
-    v.lang.toLowerCase().replace('_', '-').startsWith(targetDialect.toLowerCase())
+  const dialectVoice = voices.find(
+    (v) =>
+      v.lang.toLowerCase().replace('_', '-').startsWith(dialectPrefix) &&
+      isFemaleVoice(v)
   );
-  if (dialectVoice) return dialectVoice;
+  if (dialectVoice) {
+    cachedFemaleTeacherVoice = dialectVoice;
+    lastTargetKey = cacheKey;
+    return dialectVoice;
+  }
 
-  // Priority 4: Any en-US voice
-  const usVoice = voices.find((v) =>
+  // Priority 3: Fallback - Any American English voice
+  const fallbackUS = voices.find((v) =>
     v.lang.toLowerCase().replace('_', '-').startsWith('en-us')
   );
-  if (usVoice) return usVoice;
+  if (fallbackUS) {
+    cachedFemaleTeacherVoice = fallbackUS;
+    lastTargetKey = cacheKey;
+    return fallbackUS;
+  }
 
-  // Priority 5: Any English voice
+  // Priority 4: Fallback - Any English female voice
+  const femaleAny = voices.find(
+    (v) => v.lang.toLowerCase().startsWith('en') && isFemaleVoice(v)
+  );
+  if (femaleAny) {
+    cachedFemaleTeacherVoice = femaleAny;
+    lastTargetKey = cacheKey;
+    return femaleAny;
+  }
+
+  // Priority 5: Fallback - Any English voice
   const anyEnglish = voices.find((v) => v.lang.toLowerCase().startsWith('en'));
-  if (anyEnglish) return anyEnglish;
+  if (anyEnglish) {
+    cachedFemaleTeacherVoice = anyEnglish;
+    lastTargetKey = cacheKey;
+    return anyEnglish;
+  }
 
-  // IMPORTANT: Do NOT return voices[0] if it is Thai or non-English!
   // Return null so utterance uses utterance.lang = 'en-US' which triggers system English speech
   return null;
 }
@@ -524,625 +661,170 @@ export function queueSpeak(text: string, options: SpeakOptions = {}): Promise<vo
 // Calibrated Phonics Pronunciation
 // ==========================================
 
-export type PhonicsVoiceMode = 'sound' | 'anchor' | 'thai';
+export type PhonicsVoiceMode = 'sound' | 'anchor' | 'thai' | 'letter';
 
-/**
- * Synthesizes the authentic native English short /æ/ phoneme (เสียงสระ แอะ / /æ/ as in apple, cat, ant)
- * using Web Audio API physical vocal tract formant modeling:
- * - F0 vocal pitch: 216 Hz with natural human inflection curve (216 -> 223 -> 204 Hz)
- * - Glottal pulse: rich dual-wave source (sawtooth + triangle) with natural vocal-cord lowpass filtering
- * - Formant resonances calibrated for authentic native open front unrounded /æ/:
- *   F1 = 830 Hz (Q=8.5, gain=0.48) - open pharyngeal cavity
- *   F2 = 1760 Hz (Q=14.5, gain=0.34) - fronted tongue body resonance (gives distinct 'แอะ' timbre)
- *   F3 = 2550 Hz (Q=16.0, gain=0.16) - palatal resonance
- *   F4 = 3500 Hz (Q=16.0, gain=0.08) - upper vocal tract brilliance
- * - Vocal body chest resonance at 220 Hz for human warmth (no thin/robotic tone)
- * - Soft glottal aspiration onset (15ms breath impulse) for authentic living speech feel
- * - Smooth natural ADSR envelope (0 click, 0 distortion)
- */
-export function playShortASound(duration: number = 0.36) {
+// Cache for decoded AudioBuffers to guarantee 0ms instant playback without re-decoding
+const decodedAudioBufferCache = new Map<string, AudioBuffer>();
+
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const binaryString = window.atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+export function cleanKeyInAudio(key: string): boolean {
+  if (!key) return false;
+  const k = key.toLowerCase().trim();
+  return Boolean(AUTHENTIC_PHONICS_AUDIO[k]);
+}
+
+export async function getDecodedPhonicsBuffer(key: string): Promise<AudioBuffer | null> {
+  const cleanKey = key.toLowerCase().trim();
+  if (decodedAudioBufferCache.has(cleanKey)) {
+    return decodedAudioBufferCache.get(cleanKey)!;
+  }
+  const dataUri = AUTHENTIC_PHONICS_AUDIO[cleanKey];
+  if (!dataUri) return null;
+
   try {
     const ctx = getAudioContext();
-    const now = ctx.currentTime;
-
-    // Master envelope calibrated to match full consonant volume
-    const master = ctx.createGain();
-    master.gain.setValueAtTime(0.0001, now);
-    master.gain.linearRampToValueAtTime(0.95, now + 0.026);
-    master.gain.setValueAtTime(0.88, now + duration - 0.07);
-    master.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-
-    // 1. Dual Glottal Excitation Source (Sawtooth for rich harmonics + Triangle for warm core)
-    const oscSaw = ctx.createOscillator();
-    oscSaw.type = 'sawtooth';
-    oscSaw.frequency.setValueAtTime(216, now);
-    oscSaw.frequency.linearRampToValueAtTime(223, now + 0.045);
-    oscSaw.frequency.linearRampToValueAtTime(204, now + duration);
-
-    const oscTri = ctx.createOscillator();
-    oscTri.type = 'triangle';
-    oscTri.frequency.setValueAtTime(216, now);
-    oscTri.frequency.linearRampToValueAtTime(223, now + 0.045);
-    oscTri.frequency.linearRampToValueAtTime(204, now + duration);
-
-    const sawGain = ctx.createGain();
-    sawGain.gain.setValueAtTime(0.85, now);
-
-    const triGain = ctx.createGain();
-    triGain.gain.setValueAtTime(0.40, now);
-
-    // Initial glottal spectrum tilt (human vocal folds attenuate higher harmonics at ~12dB/octave)
-    const glottalTilt = ctx.createBiquadFilter();
-    glottalTilt.type = 'lowpass';
-    glottalTilt.frequency.setValueAtTime(3400, now);
-
-    oscSaw.connect(sawGain);
-    oscTri.connect(triGain);
-    sawGain.connect(glottalTilt);
-    triGain.connect(glottalTilt);
-
-    // 2. Formant Filters (F1, F2, F3, F4) for /æ/ (open front unrounded vowel)
-    const f1 = ctx.createBiquadFilter();
-    f1.type = 'bandpass';
-    f1.frequency.setValueAtTime(830, now);
-    f1.Q.setValueAtTime(7.5, now);
-
-    const f2 = ctx.createBiquadFilter();
-    f2.type = 'bandpass';
-    f2.frequency.setValueAtTime(1760, now);
-    f2.Q.setValueAtTime(12.0, now);
-
-    const f3 = ctx.createBiquadFilter();
-    f3.type = 'bandpass';
-    f3.frequency.setValueAtTime(2550, now);
-    f3.Q.setValueAtTime(14.0, now);
-
-    const f4 = ctx.createBiquadFilter();
-    f4.type = 'bandpass';
-    f4.frequency.setValueAtTime(3500, now);
-    f4.Q.setValueAtTime(14.0, now);
-
-    // Formant Gains (Calibrated for equal loudness parity with consonants)
-    const g1 = ctx.createGain();
-    g1.gain.setValueAtTime(0.85, now);
-
-    const g2 = ctx.createGain();
-    g2.gain.setValueAtTime(0.65, now);
-
-    const g3 = ctx.createGain();
-    g3.gain.setValueAtTime(0.35, now);
-
-    const g4 = ctx.createGain();
-    g4.gain.setValueAtTime(0.18, now);
-
-    // 3. Chest / Throat Resonance (Subglottal Body)
-    const chestFilter = ctx.createBiquadFilter();
-    chestFilter.type = 'peaking';
-    chestFilter.frequency.setValueAtTime(220, now);
-    chestFilter.Q.setValueAtTime(1.8, now);
-    chestFilter.gain.setValueAtTime(4.5, now);
-
-    // Formant bus
-    const formantBus = ctx.createGain();
-
-    glottalTilt.connect(f1);
-    glottalTilt.connect(f2);
-    glottalTilt.connect(f3);
-    glottalTilt.connect(f4);
-
-    f1.connect(g1);
-    f2.connect(g2);
-    f3.connect(g3);
-    f4.connect(g4);
-
-    g1.connect(formantBus);
-    g2.connect(formantBus);
-    g3.connect(formantBus);
-    g4.connect(formantBus);
-
-    // 4. Vocal tract high-cut smoothing filter (eliminates digital harshness)
-    const smoothFilter = ctx.createBiquadFilter();
-    smoothFilter.type = 'lowpass';
-    smoothFilter.frequency.setValueAtTime(4200, now);
-
-    formantBus.connect(chestFilter);
-    chestFilter.connect(smoothFilter);
-    smoothFilter.connect(master);
-
-    // 5. Natural Glottal Breath Onset (subtle breath impulse)
-    const noiseBufferSize = Math.floor(ctx.sampleRate * 0.05);
-    const noiseBuffer = ctx.createBuffer(1, noiseBufferSize, ctx.sampleRate);
-    const noiseData = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < noiseBufferSize; i++) {
-      noiseData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.015));
-    }
-    const noiseNode = ctx.createBufferSource();
-    noiseNode.buffer = noiseBuffer;
-
-    const noiseBandpass = ctx.createBiquadFilter();
-    noiseBandpass.type = 'bandpass';
-    noiseBandpass.frequency.setValueAtTime(1800, now);
-    noiseBandpass.Q.setValueAtTime(2.0, now);
-
-    const noiseGain = ctx.createGain();
-    noiseGain.gain.setValueAtTime(0.035, now);
-
-    noiseNode.connect(noiseBandpass);
-    noiseBandpass.connect(noiseGain);
-    noiseGain.connect(master);
-
-    // 6. Transparent Broadcast Dynamics Limiter / Compressor for perfect volume parity with consonants
-    const compressor = ctx.createDynamicsCompressor();
-    compressor.threshold.setValueAtTime(-4, now);
-    compressor.knee.setValueAtTime(4, now);
-    compressor.ratio.setValueAtTime(6, now);
-    compressor.attack.setValueAtTime(0.003, now);
-    compressor.release.setValueAtTime(0.08, now);
-
-    master.connect(compressor);
-    compressor.connect(ctx.destination);
-
-    // Start oscillators
-    oscSaw.start(now);
-    oscTri.start(now);
-    noiseNode.start(now);
-
-    const stopTime = now + duration + 0.05;
-    oscSaw.stop(stopTime);
-    oscTri.stop(stopTime);
-    noiseNode.stop(stopTime);
-  } catch {
-    // fallback if Web Audio is unsupported
+    const base64Data = dataUri.split(',')[1];
+    const arrayBuffer = base64ToArrayBuffer(base64Data);
+    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+    decodedAudioBufferCache.set(cleanKey, audioBuffer);
+    return audioBuffer;
+  } catch (err) {
+    console.warn('Failed to decode phonics audio buffer for', key, err);
+    return null;
   }
 }
 
 /**
- * Synthesizes acoustic formants for English vowels with high volume and presence,
- * calibrated to match the loudness of consonants.
- * Uses 4 acoustic vocal tract formants (F1, F2, F3, F4) + dual vocal fold oscillator
- * + subglottal chest warmth + dynamics compressor.
+ * Plays an authentic, isolated native human phonics phoneme with crystalline clarity.
+ * Used for /æ/ (Short A), /b/ (B), /ɡ/ (G), /h/ (H), /ɪ/ (Short I), /l/ (L), /ks/ (X), and /z/ (Z).
  */
-export function playVowelFormant(vowel: string, duration: number = 0.36) {
-  const lower = vowel.toLowerCase().trim();
-  if (lower === 'a' || lower === '/æ/' || lower === 'แอะ' || lower === 'แอ') {
-    playShortASound(duration);
-    return;
-  }
+export function playAuthenticPhonicsAudio(key: string, rate: number = 1.0): boolean {
+  const cleanKey = key.toLowerCase().trim();
+  const dataUri = AUTHENTIC_PHONICS_AUDIO[cleanKey];
+  if (!dataUri) return false;
 
   try {
     const ctx = getAudioContext();
-    const now = ctx.currentTime;
-
-    // Dual Glottal Excitation Source: Sawtooth for harmonics + Triangle for fundamental core warmth
-    const oscSaw = ctx.createOscillator();
-    oscSaw.type = 'sawtooth';
-    oscSaw.frequency.setValueAtTime(215, now);
-    oscSaw.frequency.linearRampToValueAtTime(206, now + duration);
-
-    const oscTri = ctx.createOscillator();
-    oscTri.type = 'triangle';
-    oscTri.frequency.setValueAtTime(215, now);
-    oscTri.frequency.linearRampToValueAtTime(206, now + duration);
-
-    const sawGain = ctx.createGain();
-    sawGain.gain.setValueAtTime(0.80, now);
-
-    const triGain = ctx.createGain();
-    triGain.gain.setValueAtTime(0.40, now);
-
-    const glottalTilt = ctx.createBiquadFilter();
-    glottalTilt.type = 'lowpass';
-    glottalTilt.frequency.setValueAtTime(3600, now);
-
-    oscSaw.connect(sawGain);
-    oscTri.connect(triGain);
-    sawGain.connect(glottalTilt);
-    triGain.connect(glottalTilt);
-
-    // Formant 1, Formant 2, Formant 3, and Formant 4
-    let f1Freq = 530;
-    let f2Freq = 1850;
-    let f3Freq = 2550;
-    let f4Freq = 3500;
-
-    if (lower === 'i' || lower === '/ɪ/' || lower === 'อิ') {
-      f1Freq = 390;
-      f2Freq = 2100;
-      f3Freq = 2850;
-      f4Freq = 3600;
-    } else if (lower === 'e' || lower === '/e/' || lower === '/ɛ/' || lower === 'เอะ') {
-      f1Freq = 530;
-      f2Freq = 1850;
-      f3Freq = 2550;
-      f4Freq = 3500;
-    } else if (lower === 'o' || lower === '/ɒ/' || lower === 'เอาะ' || lower === 'ออ' || lower === 'เอาะ/ออ') {
-      f1Freq = 580;
-      f2Freq = 960;
-      f3Freq = 2450;
-      f4Freq = 3400;
-    } else if (lower === 'u' || lower === '/ʌ/' || lower === 'อะ') {
-      f1Freq = 650;
-      f2Freq = 1220;
-      f3Freq = 2550;
-      f4Freq = 3500;
-    } else if (lower === 'long-a' || lower === '/eɪ/' || lower === 'เอ' || lower === 'a_e' || lower === 'ai' || lower === 'ay') {
-      f1Freq = 480;
-      f2Freq = 2100;
-      f3Freq = 2800;
-      f4Freq = 3500;
-    } else if (lower === 'long-e' || lower === '/iː/' || lower === 'อี' || lower === 'ee' || lower === 'ea') {
-      f1Freq = 300;
-      f2Freq = 2400;
-      f3Freq = 3000;
-      f4Freq = 3700;
-    } else if (lower === 'long-i' || lower === '/aɪ/' || lower === 'ไอ' || lower === 'i_e' || lower === 'igh') {
-      f1Freq = 680;
-      f2Freq = 1800;
-      f3Freq = 2650;
-      f4Freq = 3500;
-    } else if (lower === 'long-o' || lower === '/oʊ/' || lower === 'โอ' || lower === 'o_e' || lower === 'oa') {
-      f1Freq = 480;
-      f2Freq = 880;
-      f3Freq = 2400;
-      f4Freq = 3400;
-    } else if (lower === 'long-u' || lower === '/juː/' || lower === '/uː/' || lower === 'ยู' || lower === 'ยู/อู' || lower === 'u_e') {
-      f1Freq = 320;
-      f2Freq = 920;
-      f3Freq = 2450;
-      f4Freq = 3500;
-    } else if (lower === 'dip-oi' || lower === 'oi' || lower === 'oy' || lower === '/ɔɪ/' || lower === 'ออย') {
-      f1Freq = 520;
-      f2Freq = 1600;
-      f3Freq = 2500;
-      f4Freq = 3500;
-    } else if (lower === 'dip-ou' || lower === 'ou' || lower === 'ow' || lower === '/aʊ/' || lower === 'เอา' || lower === 'อาว' || lower === 'เอา/อาว') {
-      f1Freq = 680;
-      f2Freq = 1120;
-      f3Freq = 2450;
-      f4Freq = 3400;
-    } else if (lower === 'dip-oo' || lower === 'oo' || lower === '/ʊ/' || lower === 'oo_short' || lower === 'อุ') {
-      f1Freq = 440;
-      f2Freq = 1050;
-      f3Freq = 2400;
-      f4Freq = 3400;
-    } else if (lower === 'oo_long' || lower === 'อู') {
-      f1Freq = 320;
-      f2Freq = 850;
-      f3Freq = 2400;
-      f4Freq = 3400;
-    } else if (lower === 'dip-aw' || lower === 'aw' || lower === 'au' || lower === '/ɔː/') {
-      f1Freq = 580;
-      f2Freq = 880;
-      f3Freq = 2450;
-      f4Freq = 3400;
-    } else if (lower === 'dip-air' || lower === 'air' || lower === 'ear' || lower === '/eər/' || lower === '/ɪər/' || lower === 'แอร์' || lower === 'เอีย') {
-      f1Freq = 500;
-      f2Freq = 1950;
-      f3Freq = 2700;
-      f4Freq = 3500;
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
     }
 
-    const filter1 = ctx.createBiquadFilter();
-    filter1.type = 'bandpass';
-    filter1.frequency.setValueAtTime(f1Freq, now);
-    filter1.Q.setValueAtTime(5.0, now);
+    if (decodedAudioBufferCache.has(cleanKey)) {
+      const buffer = decodedAudioBufferCache.get(cleanKey)!;
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.playbackRate.value = rate;
+      source.connect(ctx.destination);
+      source.start();
+      return true;
+    }
 
-    const filter2 = ctx.createBiquadFilter();
-    filter2.type = 'bandpass';
-    filter2.frequency.setValueAtTime(f2Freq, now);
-    filter2.Q.setValueAtTime(7.0, now);
-
-    const filter3 = ctx.createBiquadFilter();
-    filter3.type = 'bandpass';
-    filter3.frequency.setValueAtTime(f3Freq, now);
-    filter3.Q.setValueAtTime(8.0, now);
-
-    const filter4 = ctx.createBiquadFilter();
-    filter4.type = 'bandpass';
-    filter4.frequency.setValueAtTime(f4Freq, now);
-    filter4.Q.setValueAtTime(9.0, now);
-
-    const gain1 = ctx.createGain();
-    const gain2 = ctx.createGain();
-    const gain3 = ctx.createGain();
-    const gain4 = ctx.createGain();
-    const formantBus = ctx.createGain();
-
-    // Formant gains boosted for full loudness parity with consonants
-    gain1.gain.setValueAtTime(0.85, now);
-    gain2.gain.setValueAtTime(0.65, now);
-    gain3.gain.setValueAtTime(0.35, now);
-    gain4.gain.setValueAtTime(0.18, now);
-
-    glottalTilt.connect(filter1);
-    glottalTilt.connect(filter2);
-    glottalTilt.connect(filter3);
-    glottalTilt.connect(filter4);
-
-    filter1.connect(gain1);
-    filter2.connect(gain2);
-    filter3.connect(gain3);
-    filter4.connect(gain4);
-
-    gain1.connect(formantBus);
-    gain2.connect(formantBus);
-    gain3.connect(formantBus);
-    gain4.connect(formantBus);
-
-    // Warm subglottal chest resonance (+4.5 dB)
-    const chestFilter = ctx.createBiquadFilter();
-    chestFilter.type = 'peaking';
-    chestFilter.frequency.setValueAtTime(220, now);
-    chestFilter.Q.setValueAtTime(1.8, now);
-    chestFilter.gain.setValueAtTime(4.5, now);
-
-    // High-cut smoothing filter (eliminates harsh digital buzz)
-    const smoothFilter = ctx.createBiquadFilter();
-    smoothFilter.type = 'lowpass';
-    smoothFilter.frequency.setValueAtTime(4200, now);
-
-    formantBus.connect(chestFilter);
-    chestFilter.connect(smoothFilter);
-
-    // Master ADSR envelope calibrated for full, resonant vowel sound
-    const master = ctx.createGain();
-    master.gain.setValueAtTime(0.0001, now);
-    master.gain.linearRampToValueAtTime(0.95, now + 0.025);
-    master.gain.setValueAtTime(0.88, now + duration - 0.07);
-    master.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-
-    smoothFilter.connect(master);
-
-    // Dynamics Compressor / Limiter: guarantees equal perceived loudness to consonants with 0 distortion
-    const compressor = ctx.createDynamicsCompressor();
-    compressor.threshold.setValueAtTime(-4, now);
-    compressor.knee.setValueAtTime(4, now);
-    compressor.ratio.setValueAtTime(6, now);
-    compressor.attack.setValueAtTime(0.003, now);
-    compressor.release.setValueAtTime(0.08, now);
-
-    master.connect(compressor);
-    compressor.connect(ctx.destination);
-
-    oscSaw.start(now);
-    oscTri.start(now);
-
-    const stopTime = now + duration + 0.05;
-    oscSaw.stop(stopTime);
-    oscTri.stop(stopTime);
+    getDecodedPhonicsBuffer(cleanKey).then((buffer) => {
+      if (buffer) {
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.playbackRate.value = rate;
+        source.connect(ctx.destination);
+        source.start();
+      } else {
+        const audio = new Audio(dataUri);
+        audio.playbackRate = rate;
+        audio.play().catch(() => {});
+      }
+    });
+    return true;
   } catch {
-    // Graceful fallback
+    try {
+      const audio = new Audio(dataUri);
+      audio.playbackRate = rate;
+      audio.play().catch(() => {});
+      return true;
+    } catch {
+      return false;
+    }
   }
 }
 
 /**
- * Synthesizes the authentic voiced alveolar fricative /z/ (the phonics "buzzing bee" sound)
- * using Web Audio API physical modeling:
- * 1. Voiced glottal source: 138 Hz periodic vocal-cord pulse with warm lowpass filter (voice bar)
- * 2. Alveolar turbulent frication noise: bandpass filtered at 5.2 kHz (Q=2.8) and highpass filtered at 3.2 kHz
- * 3. Vocal-fold amplitude modulation (AM): modulates the frication noise at 138 Hz to create the unmistakable /z/ buzz
- * 4. Natural ADSR envelope: 35ms attack, 220ms sustain, 65ms release (total 320ms)
+ * Asynchronously plays authentic phoneme audio, resolving when playback finishes.
  */
-export function playZSound(duration: number = 0.32) {
-  try {
-    const ctx = getAudioContext();
-    const now = ctx.currentTime;
-
-    // Master envelope gain node
-    const masterGain = ctx.createGain();
-    masterGain.gain.setValueAtTime(0.0001, now);
-    masterGain.gain.linearRampToValueAtTime(0.35, now + 0.035);
-    masterGain.gain.setValueAtTime(0.32, now + duration - 0.07);
-    masterGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-
-    // 1. Voiced Glottal Source (Voice bar / throat vocal folds vibration)
-    const voiceOsc = ctx.createOscillator();
-    voiceOsc.type = 'sawtooth';
-    voiceOsc.frequency.setValueAtTime(138, now);
-    voiceOsc.frequency.linearRampToValueAtTime(132, now + duration);
-
-    const voiceLowpass = ctx.createBiquadFilter();
-    voiceLowpass.type = 'lowpass';
-    voiceLowpass.frequency.setValueAtTime(520, now);
-
-    const voiceGain = ctx.createGain();
-    voiceGain.gain.setValueAtTime(0.28, now);
-
-    voiceOsc.connect(voiceLowpass);
-    voiceLowpass.connect(voiceGain);
-    voiceGain.connect(masterGain);
-
-    // 2. Alveolar Turbulent Frication Noise (air escaping teeth constriction)
-    const bufferSize = Math.max(1024, Math.floor(ctx.sampleRate * (duration + 0.08)));
-    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const output = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      output[i] = Math.random() * 2 - 1;
+export function playAuthenticPhonicsAudioAsync(key: string, rate: number = 1.0): Promise<boolean> {
+  return new Promise((resolve) => {
+    const cleanKey = key.toLowerCase().trim();
+    const dataUri = AUTHENTIC_PHONICS_AUDIO[cleanKey];
+    if (!dataUri) {
+      resolve(false);
+      return;
     }
 
-    const noiseSource = ctx.createBufferSource();
-    noiseSource.buffer = noiseBuffer;
+    try {
+      const ctx = getAudioContext();
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
 
-    // Highpass to eliminate low-end rumble
-    const highpass = ctx.createBiquadFilter();
-    highpass.type = 'highpass';
-    highpass.frequency.setValueAtTime(3200, now);
-
-    // Alveolar resonance bandpass centered at 5.2 kHz
-    const bandpass = ctx.createBiquadFilter();
-    bandpass.type = 'bandpass';
-    bandpass.frequency.setValueAtTime(5200, now);
-    bandpass.Q.setValueAtTime(2.8, now);
-
-    // 3. Amplitude Modulation: Vocal fold periodic vibration modulates noise amplitude
-    // This gives the signature buzzing timbre of /z/ rather than unvoiced /s/ or separate hum
-    const amOsc = ctx.createOscillator();
-    amOsc.type = 'sine';
-    amOsc.frequency.setValueAtTime(138, now);
-
-    const amDepth = ctx.createGain();
-    amDepth.gain.setValueAtTime(0.42, now);
-
-    const noiseGain = ctx.createGain();
-    noiseGain.gain.setValueAtTime(0.55, now);
-
-    amOsc.connect(amDepth);
-    amDepth.connect(noiseGain.gain);
-
-    noiseSource.connect(highpass);
-    highpass.connect(bandpass);
-    bandpass.connect(noiseGain);
-    noiseGain.connect(masterGain);
-
-    // Connect master to audio context destination
-    masterGain.connect(ctx.destination);
-
-    // Start audio sources
-    voiceOsc.start(now);
-    amOsc.start(now);
-    noiseSource.start(now);
-
-    // Clean stop
-    const stopTime = now + duration + 0.05;
-    voiceOsc.stop(stopTime);
-    amOsc.stop(stopTime);
-    noiseSource.stop(stopTime);
-  } catch {
-    // Graceful fallback if Web Audio is unsupported
-  }
+      getDecodedPhonicsBuffer(cleanKey).then((buffer) => {
+        if (buffer) {
+          const source = ctx.createBufferSource();
+          source.buffer = buffer;
+          source.playbackRate.value = rate;
+          source.connect(ctx.destination);
+          source.onended = () => resolve(true);
+          source.start();
+          setTimeout(() => resolve(true), Math.max(250, (buffer.duration / rate) * 1000 + 80));
+        } else {
+          const audio = new Audio(dataUri);
+          audio.playbackRate = rate;
+          audio.onended = () => resolve(true);
+          audio.onerror = () => resolve(false);
+          audio.play().catch(() => resolve(false));
+          setTimeout(() => resolve(true), 600);
+        }
+      });
+    } catch {
+      resolve(false);
+    }
+  });
 }
 
-/**
- * Synthesizes the authentic native English phonics sound of letter X (/ks/)
- * as in box, fox, six, axe (เสียง คสึ - ไม่มีเสียงสระ 'เอะ' นำหน้าเหมือนคำว่า ecks / เอ็กซ์)
- * Consists of:
- * 1. Crisp voiceless velar plosive burst (/k/): transient click at 2.2 kHz (18ms)
- * 2. Voiceless alveolar sibilant frication (/s/): high-frequency noise bandpassed at 6.4 kHz
- * 3. Fast natural decay envelope reproducing the authentic phonics release /ks/
- */
-export function playXSound(duration: number = 0.26) {
-  try {
-    const ctx = getAudioContext();
-    const now = ctx.currentTime;
-
-    // Master envelope
-    const master = ctx.createGain();
-    master.gain.setValueAtTime(0.0001, now);
-    master.gain.linearRampToValueAtTime(0.38, now + 0.015);
-    master.gain.setValueAtTime(0.34, now + duration - 0.06);
-    master.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-
-    // 1. Voiceless Velar Plosive Burst (/k/)
-    // Short pitch drop transient to give the 'k' tongue-release attack
-    const kClickOsc = ctx.createOscillator();
-    kClickOsc.type = 'sine';
-    kClickOsc.frequency.setValueAtTime(1400, now);
-    kClickOsc.frequency.exponentialRampToValueAtTime(180, now + 0.018);
-
-    const kClickGain = ctx.createGain();
-    kClickGain.gain.setValueAtTime(0.35, now);
-    kClickGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.022);
-
-    kClickOsc.connect(kClickGain);
-    kClickGain.connect(master);
-
-    // 2. Velar burst noise (/k/ acoustic burst centered at 2100 Hz)
-    const kNoiseBuffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.035), ctx.sampleRate);
-    const kNoiseData = kNoiseBuffer.getChannelData(0);
-    for (let i = 0; i < kNoiseData.length; i++) {
-      kNoiseData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.012));
-    }
-    const kNoiseSource = ctx.createBufferSource();
-    kNoiseSource.buffer = kNoiseBuffer;
-
-    const kBandpass = ctx.createBiquadFilter();
-    kBandpass.type = 'bandpass';
-    kBandpass.frequency.setValueAtTime(2200, now);
-    kBandpass.Q.setValueAtTime(2.5, now);
-
-    const kNoiseGain = ctx.createGain();
-    kNoiseGain.gain.setValueAtTime(0.40, now);
-
-    kNoiseSource.connect(kBandpass);
-    kBandpass.connect(kNoiseGain);
-    kNoiseGain.connect(master);
-
-    // 3. Voiceless Alveolar Sibilant Frication (/s/)
-    // Starts immediately during the /k/ release and provides the signature /ks/ hiss
-    const sBufferSize = Math.floor(ctx.sampleRate * duration);
-    const sBuffer = ctx.createBuffer(1, sBufferSize, ctx.sampleRate);
-    const sData = sBuffer.getChannelData(0);
-    for (let i = 0; i < sBufferSize; i++) {
-      sData[i] = Math.random() * 2 - 1;
-    }
-    const sSource = ctx.createBufferSource();
-    sSource.buffer = sBuffer;
-
-    const sHighpass = ctx.createBiquadFilter();
-    sHighpass.type = 'highpass';
-    sHighpass.frequency.setValueAtTime(4500, now);
-
-    const sBandpass = ctx.createBiquadFilter();
-    sBandpass.type = 'bandpass';
-    sBandpass.frequency.setValueAtTime(6400, now);
-    sBandpass.Q.setValueAtTime(1.8, now);
-
-    const sGain = ctx.createGain();
-    // /s/ gains momentum right after the /k/ transient (at +0.018s)
-    sGain.gain.setValueAtTime(0.0001, now);
-    sGain.gain.linearRampToValueAtTime(0.52, now + 0.028);
-    sGain.gain.setValueAtTime(0.48, now + duration - 0.06);
-    sGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-
-    sSource.connect(sHighpass);
-    sHighpass.connect(sBandpass);
-    sBandpass.connect(sGain);
-    sGain.connect(master);
-
-    // Connect to destination
-    master.connect(ctx.destination);
-
-    // Start audio sources
-    kClickOsc.start(now);
-    kNoiseSource.start(now);
-    sSource.start(now);
-
-    const stopTime = now + duration + 0.03;
-    kClickOsc.stop(now + 0.025);
-    kNoiseSource.stop(now + 0.035);
-    sSource.stop(stopTime);
-  } catch {
-    // fallback if Web Audio is unsupported
-  }
-}
-
-/**
- * Authentic Native English Phonics Prompts Table (Pronounced by US/UK English TTS Engines)
- * Calibrated with single-phoneme release syllables to prevent TTS acronym spelling traps.
- */
 export const NATIVE_ENGLISH_PHONICS_TABLE: Record<string, string> = {
-  // Consonants (Pure English onset/coda phonemes)
-  b: 'buh',
-  c: 'kuh',
-  d: 'duh',
-  f: 'fuh', // Fixed: 'fuh' prevents TTS spelling 'eff-eff-eff'
-  g: 'guh',
-  h: 'huh',
-  j: 'juh',
-  k: 'kuh',
-  l: 'luh',
-  m: 'muh', // Fixed: 'muh' prevents TTS spelling 'em-em-em'
-  n: 'nuh', // Fixed: 'nuh' prevents TTS spelling 'en-en-en'
-  p: 'puh',
-  q: 'qua', // Fixed: 'qua' (/kwɑ/) prevents TTS spelling 'K-W-U-H'
-  r: 'ruh',
-  s: 'suh', // Fixed: 'suh' prevents TTS spelling 'es-es-es'
-  t: 'tuh',
-  v: 'vuh',
-  w: 'wuh',
-  x: 'ecks', // Fixed: 'ecks' (/ɛks/) prevents TTS expanding 'ks' into 'Kansas'
-  y: 'yuh',
-  z: 'zuh', // Fixed: 'zuh' prevents TTS spelling 'zee-zee-zee'
+  // Consonants (Pure English onset/coda phonemes pronounced by American female teacher)
+  b: 'buh', // [bʌ] - บึ/เบอะ
+  c: 'kuh', // [kʌ] - คึ
+  d: 'duh', // [dʌ] - ดึ
+  f: 'fuh', // [fʌ] - ฟึ
+  g: 'guh', // [ɡʌ] - เกอะ / กึ (adheres strictly to international Jolly/Oxford Phonics standards, NOT "กา")
+  h: 'huh', // [hʌ] - เฮอะ / ฮึ (open-throat glottal breathing sound, NOT laughing "ฮา")
+  j: 'juh', // [dʒʌ] - จึ
+  k: 'kuh', // [kʌ] - คึ
+  l: 'luh', // [lʌ] - เลอะ / ลึ (alveolar lateral liquid, NOT singing "ลา")
+  m: 'muh', // [mʌ] - มึ
+  n: 'nuh', // [nʌ] - นึ
+  p: 'puh', // [pʌ] - พึ
+  q: 'kwuh', // [kwʌ] - ควึ/เควอะ
+  r: 'ruh', // [ɹʌ] - รึ
+  s: 'suh', // [sʌ] - ซึ
+  t: 'tuh', // [tʌ] - ทึ
+  v: 'vuh', // [vʌ] - วึ
+  w: 'wuh', // [wʌ] - วึ
+  y: 'yuh', // [jʌ] - ยึ
+  z: 'zee', // [ziː] - ซี (General American standard with rich vocal cord vibration)
+
+  // Short Vowels (authentic native American English female teacher pronunciation)
+  a: 'a', // Handled primarily via AUTHENTIC_PHONICS_AUDIO (/æ/ - แอะ/แอ)
+  e: 'eh', // short /ɛ/ as in egg, bed, red
+  i: 'ih', // Handled primarily via AUTHENTIC_PHONICS_AUDIO (/ɪ/ - อิ)
+  o: 'ah', // short /ɑ/ as in ox, hot, box (General American short O)
+  u: 'uh', // short /ʌ/ as in up, sun, cup
 
   // Consonant Digraphs & Blends
   ch: 'chuh',
@@ -1151,7 +833,7 @@ export const NATIVE_ENGLISH_PHONICS_TABLE: Record<string, string> = {
   wh: 'wuh',
   ph: 'fuh',
   ck: 'kuh',
-  qu: 'qua',
+  qu: 'kwuh',
   cl: 'cluh',
   cr: 'cruh',
   br: 'bruh',
@@ -1171,42 +853,36 @@ export const NATIVE_ENGLISH_PHONICS_TABLE: Record<string, string> = {
   sw: 'swuh',
   tr: 'truh',
 
-  // Short Vowels (authentic native English pronunciation)
-  a: 'at', // short /æ/ as in apple, cat (intercepted by playShortASound)
-  e: 'eh', // short /e/ as in egg, bed
-  i: 'ih', // short /ɪ/ synthesized via dedicated formant
-  o: 'aw', // short /ɒ/ or /ɑ/ as in ox, hot
-  u: 'uh', // short /ʌ/ as in up, sun
-
-  // Long Vowels (Magic E and Vowel Teams)
-  'long-a': 'ay',
-  'long-e': 'ee',
-  'long-i': 'eye',
-  'long-o': 'oh',
-  'long-u': 'yoo',
-  ai: 'ay',
-  ay: 'ay',
-  ee: 'ee',
-  ea: 'ee',
-  ie: 'eye',
-  igh: 'eye',
-  oa: 'oh',
+  // Long Vowels
+  'long-a': 'A',
+  'a_e': 'A',
+  ai: 'A',
+  ay: 'A',
+  'long-e': 'E',
+  'long-i': 'I',
+  'long-o': 'O',
+  'long-u': 'U',
+  ee: 'E',
+  ea: 'E',
+  ie: 'I',
+  igh: 'I',
+  oa: 'O',
   ow: 'ow',
-  ue: 'yoo',
-  ew: 'yoo',
+  ue: 'U',
+  ew: 'U',
 
   // Diphthongs
   'dip-oi': 'oy',
   'dip-ou': 'ow',
-  'dip-oo': 'oo',
+  'dip-oo': 'ooh',
   'dip-aw': 'aw',
   'dip-air': 'air',
   oi: 'oy',
   oy: 'oy',
   ou: 'ow',
-  oo: 'oo',
+  oo: 'ooh',
   oo_short: 'ooh',
-  oo_long: 'oo',
+  oo_long: 'ooh',
   aw: 'aw',
   au: 'aw',
   air: 'air',
@@ -1215,7 +891,7 @@ export const NATIVE_ENGLISH_PHONICS_TABLE: Record<string, string> = {
   are: 'air',
 
   // IPA aliases
-  '/æ/': 'at',
+  '/æ/': 'a',
   '/b/': 'buh',
   '/k/': 'kuh',
   '/d/': 'duh',
@@ -1223,33 +899,40 @@ export const NATIVE_ENGLISH_PHONICS_TABLE: Record<string, string> = {
   '/ɛ/': 'eh',
   '/f/': 'fuh',
   '/g/': 'guh',
+  '/ɡ/': 'guh',
   '/h/': 'huh',
   '/ɪ/': 'ih',
   '/dʒ/': 'juh',
   '/l/': 'luh',
   '/m/': 'muh',
   '/n/': 'nuh',
-  '/ɒ/': 'aw',
+  '/ɒ/': 'ah',
+  '/ɑ/': 'ah',
   '/p/': 'puh',
-  '/kw/': 'qua',
+  '/kw/': 'kwuh',
   '/r/': 'ruh',
   '/s/': 'suh',
   '/t/': 'tuh',
   '/ʌ/': 'uh',
   '/v/': 'vuh',
   '/w/': 'wuh',
-  '/ks/': 'ecks',
+  '/ks/': 'x',
+  ks: 'x',
+  x: 'x',
   '/j/': 'yuh',
-  '/z/': 'zuh',
+  '/z/': 'zee',
   '/ʃ/': 'shuh',
   '/tʃ/': 'chuh',
   '/θ/': 'thuh',
-  '/eɪ/': 'ay',
-  '/iː/': 'ee',
-  '/aɪ/': 'eye',
-  '/oʊ/': 'oh',
-  '/juː/': 'yoo',
-  '/uː/': 'oo',
+  '/ð/': 'thuh',
+  '/ŋ/': 'ng',
+  '/ɹ/': 'ruh',
+  '/eɪ/': 'A',
+  '/iː/': 'E',
+  '/aɪ/': 'I',
+  '/oʊ/': 'O',
+  '/juː/': 'U',
+  '/uː/': 'ooh',
   '/ɔɪ/': 'oy',
   '/aʊ/': 'ow',
   '/ɔː/': 'aw',
@@ -1274,6 +957,7 @@ export const THAI_TO_PHONEME_MAP: Record<string, string> = {
   'เอาะ/ออ': 'o',
   'อะ': 'u',
   'เอ': 'long-a',
+  'เอย์': 'long-a',
   'อี': 'long-e',
   'ไอ': 'long-i',
   'โอ': 'long-o',
@@ -1309,14 +993,18 @@ export const THAI_TO_PHONEME_MAP: Record<string, string> = {
   'น': 'n',
   'พึ': 'p',
   'พ': 'p',
-  'ควึ': 'qu',
-  'คว': 'qu',
+  'ควึ': 'q',
+  'คว': 'q',
   'รึ': 'r',
   'ร': 'r',
   'ซึ': 's',
   'ซ': 's',
   'ทึ': 't',
   'ท': 't',
+  'ตึ': 't',
+  'ต': 't',
+  'ปึ': 'p',
+  'ป': 'p',
   'วึ': 'w',
   'ว': 'w',
   'คสึ': 'x',
@@ -1330,6 +1018,7 @@ export const THAI_TO_PHONEME_MAP: Record<string, string> = {
   'ธ': 'th',
   'ซสึ': 'z',
   'ซึสั่น': 'z',
+  'ซึ (สั่น)': 'z',
   'แซด': 'z',
   'ซี': 'z',
 };
@@ -1363,7 +1052,7 @@ export const PHONICS_SOUND_TABLE: Record<string, string> = {
   w: 'วึ',
   x: 'คสึ',
   y: 'ยึ',
-  z: 'ซึ',
+  z: 'ซึสั่น',
   'long-a': 'เอ',
   'long-e': 'อี',
   'long-i': 'ไอ',
@@ -1382,6 +1071,7 @@ export const PHONICS_SOUND_TABLE: Record<string, string> = {
   'เอาะ': 'เอาะ',
   'อะ': 'อะ',
   'เอ': 'เอ',
+  'เอย์': 'เอ',
   'อี': 'อี',
   'ไอ': 'ไอ',
   'โอ': 'โอ',
@@ -1406,31 +1096,18 @@ export const playPhonicsSound = (
   preferredVoiceURI?: string,
   mode?: PhonicsVoiceMode
 ) => {
-  if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-    if (letter.toLowerCase().trim() === 'z' || letter.toLowerCase().trim() === '/z/') {
-      playZSound();
-    } else if (letter.toLowerCase().trim() === 'x' || letter.toLowerCase().trim() === '/ks/') {
-      playXSound();
-    } else if (letter.toLowerCase().trim() === 'a' || letter.toLowerCase().trim() === '/æ/') {
-      playShortASound();
-    } else {
-      playVowelFormant(letter);
-    }
-    return;
-  }
-
-  window.speechSynthesis.cancel();
-  if (window.speechSynthesis.paused) {
-    window.speechSynthesis.resume();
-  }
-
   const activeMode = mode || currentVoiceMode || 'sound';
   const voiceURI = preferredVoiceURI || currentPreferredVoiceURI;
   const rawKey = letter.toLowerCase().trim();
+  const englishKey = THAI_TO_PHONEME_MAP[rawKey] || rawKey;
 
   // Mode 1: Thai Teacher Phonics Sound (เมื่อผู้ใช้เลือกโหมดครูไทยโดยเฉพาะ)
   if (activeMode === 'thai') {
-    const soundText = PHONICS_SOUND_TABLE[rawKey] || LETTER_PHONICS_MAP[rawKey]?.soundTh || letter;
+    const soundText =
+      PHONICS_SOUND_TABLE[rawKey] ||
+      PHONICS_SOUND_TABLE[englishKey] ||
+      LETTER_PHONICS_MAP[englishKey]?.soundTh ||
+      letter;
     const utterance = new SpeechSynthesisUtterance(soundText);
     const thaiVoice = getThaiVoice();
     if (thaiVoice) utterance.voice = thaiVoice;
@@ -1444,24 +1121,23 @@ export const playPhonicsSound = (
     setTimeout(() => {
       try {
         window.speechSynthesis.speak(utterance);
-      } catch {
-        // fallback
-      }
+      } catch {}
     }, 25);
     return;
   }
 
-  // Mode 2: Anchor Word Mode (e.g. "a as in apple", "c as in cat")
+  // Mode 2: Anchor Word Mode (e.g. "A as in apple", "B as in bat")
   if (activeMode === 'anchor') {
-    const cleanKey = THAI_TO_PHONEME_MAP[rawKey] || rawKey;
-    const detail = LETTER_PHONICS_MAP[cleanKey];
-    const textToSpeak = detail?.anchorWord ? `${cleanKey}, as in ${detail.anchorWord}` : cleanKey;
+    const detail = LETTER_PHONICS_MAP[englishKey];
+    const textToSpeak = detail?.anchorWord
+      ? `${englishKey.toUpperCase()}, as in ${detail.anchorWord}`
+      : englishKey;
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
     const enVoice = getEnglishVoice(voiceURI, currentDialect);
     if (enVoice) utterance.voice = enVoice;
     utterance.lang = currentDialect || 'en-US';
     utterance.rate = customRate || 0.85;
-    utterance.pitch = 1.0;
+    utterance.pitch = 1.05;
 
     activeUtterances.add(utterance);
     utterance.onend = () => activeUtterances.delete(utterance);
@@ -1469,60 +1145,43 @@ export const playPhonicsSound = (
     setTimeout(() => {
       try {
         window.speechSynthesis.speak(utterance);
-      } catch {
-        // fallback
-      }
+      } catch {}
     }, 25);
     return;
   }
 
-  // Mode 3: Pure Native English Phonics Sound (โหมดสากลแท้ 100% ไม่ติดสำเนียงไทย)
-  // Resolve phoneme key even if caller passed a Thai phonetic label (e.g. 'แอ', 'แอะ', 'คึ')
-  const englishKey = THAI_TO_PHONEME_MAP[rawKey] || rawKey;
-
-  // Short A (/æ/) - Solves TTS vowel distortion ('ah' /ɑː/ -> pure short /æ/ แอะ as in apple, cat, ant)
-  if (englishKey === 'a' || englishKey === '/æ/') {
-    playShortASound();
+  // Mode 3: Alphabet Letter Name Mode (ชื่อตัวอักษร A-Z มาตรฐานสากล เช่น A, B, C, D... Z)
+  if (activeMode === 'letter') {
+    let letterText = englishKey.length === 1 ? englishKey.toUpperCase() : englishKey;
+    if (englishKey === 'z') {
+      letterText = currentDialect === 'en-GB' ? 'zed' : 'zee';
+    } else if (englishKey === 'x') {
+      letterText = 'X';
+    }
+    speakText(letterText, {
+      rate: customRate || 0.85,
+      pitch: 1.05,
+      lang: currentDialect || 'en-US',
+      voiceURI,
+    });
     return;
   }
 
-  // Short E (/e/ or /ɛ/) as in egg, bed, red
-  if (englishKey === 'e' || englishKey === '/e/' || englishKey === '/ɛ/') {
-    playVowelFormant('e');
+  // Mode 4: Pure Native English Phonics Sound (โหมดเสียงโฟนิกส์สากลมาตรฐาน)
+  // For 'a' (/æ/), 'i' (/ɪ/), and 'x' (/ks/): play pure authentic phoneme audio without consonant tails or distortions!
+  if (cleanKeyInAudio(englishKey) || cleanKeyInAudio(rawKey)) {
+    const targetKey = cleanKeyInAudio(englishKey) ? englishKey : rawKey;
+    playAuthenticPhonicsAudio(targetKey);
     return;
   }
 
-  // Short I (/ɪ/) has no isolated open-syllable word in English orthography (TTS engines spell 'I-H')
-  // We play the pristine acoustic vocal tract synthesizer to produce pure /ɪ/ (เสียง อิ)
-  if (englishKey === 'i' || englishKey === '/ɪ/') {
-    playVowelFormant('i');
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
     return;
   }
 
-  // Short O (/ɒ/) as in ox, hot, dog (เสียง เอาะ/ออ) - synthesized loud and clear
-  if (englishKey === 'o' || englishKey === '/ɒ/') {
-    playVowelFormant('o');
-    return;
-  }
-
-  // Short U (/ʌ/) as in up, sun, cup (เสียง อะ/อั) - synthesized loud and clear
-  if (englishKey === 'u' || englishKey === '/ʌ/') {
-    playVowelFormant('u');
-    return;
-  }
-
-  // Pure Voiceless Velar-Alveolar Cluster /ks/ (เสียง คสึ แท้ 100% ไม่มีเสียงสระ เอะ นำหน้าเหมือนคำว่า ecks / เอ็กซ์)
-  if (englishKey === 'x' || englishKey === '/ks/' || englishKey === 'ks') {
-    playXSound();
-    return;
-  }
-
-  // Pure Voiced Alveolar Fricative /z/ (เสียงผึ้งบิน zzzzz แท้ 100% ไม่เพี้ยน ไม่กระตุก)
-  // Standard TTS engines produce an unnatural grunt or distorted 'zuh' for letter Z.
-  // We synthesize the authentic Jolly Phonics / Oxford Phonics buzzing sibilant /z/.
-  if (englishKey === 'z' || englishKey === '/z/' || englishKey === 'zz') {
-    playZSound();
-    return;
+  window.speechSynthesis.cancel();
+  if (window.speechSynthesis.paused) {
+    window.speechSynthesis.resume();
   }
 
   const spokenPhoneme =
@@ -1531,44 +1190,23 @@ export const playPhonicsSound = (
     englishKey;
 
   const utterance = new SpeechSynthesisUtterance(spokenPhoneme);
-  const voice = getEnglishVoice(voiceURI, currentDialect);
+  const voice = getEnglishVoice(voiceURI, currentDialect || 'en-US');
   if (voice) {
     utterance.voice = voice;
   }
   utterance.lang = currentDialect || 'en-US';
-  utterance.rate = customRate || 0.9;
-  utterance.pitch = 1.0;
+  utterance.rate = customRate || 0.88;
+  utterance.pitch = 1.05; // natural cheerful American female teacher pitch
   utterance.volume = 1.0; // 100% full volume
 
   activeUtterances.add(utterance);
   utterance.onend = () => activeUtterances.delete(utterance);
-  utterance.onerror = () => {
-    activeUtterances.delete(utterance);
-    if (englishKey === 'a' || englishKey === '/æ/') {
-      playShortASound();
-    } else if (englishKey === 'x' || englishKey === '/ks/') {
-      playXSound();
-    } else if (englishKey === 'z' || englishKey === '/z/') {
-      playZSound();
-    } else if (['i', 'e', 'o', 'u'].includes(englishKey)) {
-      playVowelFormant(englishKey);
-    }
-  };
+  utterance.onerror = () => activeUtterances.delete(utterance);
 
   setTimeout(() => {
     try {
       window.speechSynthesis.speak(utterance);
-    } catch {
-      if (englishKey === 'a' || englishKey === '/æ/') {
-        playShortASound();
-      } else if (englishKey === 'x' || englishKey === '/ks/') {
-        playXSound();
-      } else if (englishKey === 'z' || englishKey === '/z/') {
-        playZSound();
-      } else {
-        playVowelFormant(englishKey);
-      }
-    }
+    } catch {}
   }, 25);
 };
 
@@ -1588,74 +1226,61 @@ export function playPhonicsSoundAsync(
     const activeMode = mode || currentVoiceMode || 'sound';
     const englishKey = THAI_TO_PHONEME_MAP[rawKey] || rawKey;
 
-    // Web Audio Synthesized sounds (100% deterministic duration and loud balanced presence)
-    if (activeMode !== 'thai' && activeMode !== 'anchor') {
-      if (englishKey === 'a' || englishKey === '/æ/') {
-        playShortASound(0.38);
-        setTimeout(resolve, 400);
-        return;
+    if (activeMode === 'letter') {
+      let letterText = englishKey.length === 1 ? englishKey.toUpperCase() : englishKey;
+      if (englishKey === 'z') {
+        letterText = currentDialect === 'en-GB' ? 'zed' : 'zee';
+      } else if (englishKey === 'x') {
+        letterText = 'X';
       }
-      if (englishKey === 'e' || englishKey === '/e/' || englishKey === '/ɛ/') {
-        playVowelFormant('e', 0.36);
-        setTimeout(resolve, 380);
-        return;
-      }
-      if (englishKey === 'i' || englishKey === '/ɪ/') {
-        playVowelFormant('i', 0.36);
-        setTimeout(resolve, 380);
-        return;
-      }
-      if (englishKey === 'o' || englishKey === '/ɒ/') {
-        playVowelFormant('o', 0.36);
-        setTimeout(resolve, 380);
-        return;
-      }
-      if (englishKey === 'u' || englishKey === '/ʌ/') {
-        playVowelFormant('u', 0.36);
-        setTimeout(resolve, 380);
-        return;
-      }
-      if (englishKey === 'x' || englishKey === '/ks/' || englishKey === 'ks') {
-        playXSound(0.30);
-        setTimeout(resolve, 340);
-        return;
-      }
-      if (englishKey === 'z' || englishKey === '/z/' || englishKey === 'zz') {
-        playZSound(0.36);
-        setTimeout(resolve, 380);
-        return;
-      }
+      speakText(letterText, {
+        rate: Math.min(customRate || 0.78, 0.85),
+        pitch: 1.05,
+        lang: currentDialect || 'en-US',
+        voiceURI: preferredVoiceURI,
+      }).then(resolve);
+      return;
+    }
+
+    if (activeMode === 'sound' && (cleanKeyInAudio(englishKey) || cleanKeyInAudio(rawKey))) {
+      const targetKey = cleanKeyInAudio(englishKey) ? englishKey : rawKey;
+      playAuthenticPhonicsAudioAsync(targetKey).then(() => resolve());
+      return;
     }
 
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-      playVowelFormant(englishKey);
-      setTimeout(resolve, 360);
+      resolve();
       return;
     }
 
     let textToSpeak = '';
     let voiceToUse: SpeechSynthesisVoice | null = null;
     let lang: string = currentDialect || 'en-US';
-    // Deliberate, patient, clear rate for beginner students
-    let rate = Math.min(customRate || 0.74, 0.78);
-    let pitch = 1.0;
+    let rate = customRate || 0.85;
+    let pitch = 1.05;
 
     if (activeMode === 'thai') {
-      textToSpeak = PHONICS_SOUND_TABLE[rawKey] || LETTER_PHONICS_MAP[rawKey]?.soundTh || letter;
+      textToSpeak =
+        PHONICS_SOUND_TABLE[rawKey] ||
+        PHONICS_SOUND_TABLE[englishKey] ||
+        LETTER_PHONICS_MAP[englishKey]?.soundTh ||
+        letter;
       voiceToUse = getThaiVoice();
       lang = 'th-TH';
       rate = Math.min(customRate || 0.80, 0.85);
       pitch = 1.05;
     } else if (activeMode === 'anchor') {
       const detail = LETTER_PHONICS_MAP[englishKey];
-      textToSpeak = detail?.anchorWord ? `${englishKey}, as in ${detail.anchorWord}` : englishKey;
-      voiceToUse = getEnglishVoice(preferredVoiceURI || currentPreferredVoiceURI, currentDialect);
+      textToSpeak = detail?.anchorWord
+        ? `${englishKey.toUpperCase()}, as in ${detail.anchorWord}`
+        : englishKey;
+      voiceToUse = getEnglishVoice(preferredVoiceURI || currentPreferredVoiceURI, currentDialect || 'en-US');
     } else {
       textToSpeak =
         NATIVE_ENGLISH_PHONICS_TABLE[englishKey] ||
         NATIVE_ENGLISH_PHONICS_TABLE[rawKey] ||
         englishKey;
-      voiceToUse = getEnglishVoice(preferredVoiceURI || currentPreferredVoiceURI, currentDialect);
+      voiceToUse = getEnglishVoice(preferredVoiceURI || currentPreferredVoiceURI, currentDialect || 'en-US');
     }
 
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
@@ -1663,7 +1288,7 @@ export function playPhonicsSoundAsync(
     utterance.lang = lang;
     utterance.rate = rate;
     utterance.pitch = pitch;
-    utterance.volume = 1.0; // 100% full volume
+    utterance.volume = 1.0;
 
     let finished = false;
     const finish = () => {
@@ -1679,7 +1304,7 @@ export function playPhonicsSoundAsync(
     utterance.onerror = finish;
 
     // Safety watchdog timeout
-    setTimeout(finish, 1300);
+    setTimeout(finish, 1500);
 
     setTimeout(() => {
       try {
@@ -1691,10 +1316,6 @@ export function playPhonicsSoundAsync(
   });
 }
 
-/**
- * Pronounce an individual letter with high phonics accuracy and native English accent
- * Calibrated with comfortable spacing for early learners.
- */
 export async function speakLetterPhoneme(
   letter: string,
   rate: number = 0.74,

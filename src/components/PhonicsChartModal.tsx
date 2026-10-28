@@ -1,6 +1,12 @@
-import React, { useState } from 'react';
-import { playPhonicsSound, stopSpeaking, unlockAudio } from '../utils/audioUtils';
-import { Volume2, X, Play, Square, Sparkles, Layers } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import {
+  playPhonicsSound,
+  playPhonicsSoundAsync,
+  stopSpeaking,
+  unlockAudio,
+  PhonicsVoiceMode,
+} from '../utils/audioUtils';
+import { Volume2, X, Play, Square, Sparkles, Layers, BookOpen } from 'lucide-react';
 
 interface PhonicsChartModalProps {
   isOpen: boolean;
@@ -23,7 +29,7 @@ export const ALPHABET_26 = [
   { upper: 'L', lower: 'l', ipa: '/l/', thai: 'ลึ', isVowel: false },
   { upper: 'M', lower: 'm', ipa: '/m/', thai: 'มึ', isVowel: false },
   { upper: 'N', lower: 'n', ipa: '/n/', thai: 'นึ', isVowel: false },
-  { upper: 'O', lower: 'o', ipa: '/ɒ/', thai: 'ออ', isVowel: true },
+  { upper: 'O', lower: 'o', ipa: '/ɑ/', thai: 'ออ', isVowel: true },
   { upper: 'P', lower: 'p', ipa: '/p/', thai: 'พึ', isVowel: false },
   { upper: 'Q', lower: 'q', ipa: '/kw/', thai: 'ควึ', isVowel: false },
   { upper: 'R', lower: 'r', ipa: '/r/', thai: 'รึ', isVowel: false },
@@ -59,15 +65,17 @@ export const PhonicsChartModal: React.FC<PhonicsChartModalProps> = ({
   speedRate,
 }) => {
   const [chartSection, setChartSection] = useState<'alphabet' | 'long' | 'diphthong'>('alphabet');
+  const [chartSoundMode, setChartSoundMode] = useState<PhonicsVoiceMode>('sound');
   const [activeLetter, setActiveLetter] = useState<string | null>(null);
   const [isAutoPlaying, setIsAutoPlaying] = useState<boolean>(false);
+  const isAutoPlayingRef = useRef<boolean>(false);
 
   if (!isOpen) return null;
 
   const handlePlayLetter = (soundKey: string) => {
     unlockAudio();
     setActiveLetter(soundKey);
-    playPhonicsSound(soundKey, speedRate);
+    playPhonicsSound(soundKey, speedRate, undefined, chartSoundMode);
     setTimeout(() => {
       setActiveLetter((current) => (current === soundKey ? null : current));
     }, 450);
@@ -75,6 +83,7 @@ export const PhonicsChartModal: React.FC<PhonicsChartModalProps> = ({
 
   const handlePlayAllSequential = async () => {
     if (isAutoPlaying) {
+      isAutoPlayingRef.current = false;
       stopSpeaking();
       setIsAutoPlaying(false);
       setActiveLetter(null);
@@ -83,6 +92,7 @@ export const PhonicsChartModal: React.FC<PhonicsChartModalProps> = ({
 
     unlockAudio();
     setIsAutoPlaying(true);
+    isAutoPlayingRef.current = true;
 
     const listToPlay =
       chartSection === 'alphabet'
@@ -92,12 +102,15 @@ export const PhonicsChartModal: React.FC<PhonicsChartModalProps> = ({
         : DIPHTHONG_CHART.map((x) => x.lower);
 
     for (let i = 0; i < listToPlay.length; i++) {
+      if (!isAutoPlayingRef.current) break;
       const key = listToPlay[i];
       setActiveLetter(key);
-      playPhonicsSound(key, speedRate);
-      await new Promise((r) => setTimeout(r, 650));
+      await playPhonicsSoundAsync(key, speedRate, undefined, chartSoundMode);
+      if (!isAutoPlayingRef.current) break;
+      await new Promise((r) => setTimeout(r, 220));
     }
 
+    isAutoPlayingRef.current = false;
     setIsAutoPlaying(false);
     setActiveLetter(null);
   };
@@ -118,16 +131,16 @@ export const PhonicsChartModal: React.FC<PhonicsChartModalProps> = ({
         </button>
 
         {/* Modal Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pr-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3 pr-8">
           <div>
             <div className="flex items-center gap-2">
               <span className="text-2xl">🔤</span>
               <h3 className="font-bubble text-xl sm:text-2xl font-black text-slate-800">
-                ตารางเสียงโฟนิกส์มาตรฐาน
+                ตารางเสียงตัวอักษรและโฟนิกส์มาตรฐานสากล
               </h3>
             </div>
             <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-              แตะเพื่อฟังการออกเสียงโฟนิกส์ภาษาไทยตามหลักสูตรประถม
+              ระบบเสียงสำเนียงอเมริกันมาตรฐานสากล (General American) สม่ำเสมอชัดเจนทุกตัวอักษร A-Z
             </p>
           </div>
 
@@ -148,9 +161,73 @@ export const PhonicsChartModal: React.FC<PhonicsChartModalProps> = ({
             ) : (
               <>
                 <Play className="w-4 h-4 fill-white" />
-                <span>ฟังเสียงอัตโนมัติต่อเนื่อง</span>
+                <span>ฟังเสียงอัตโนมัติต่อเนื่อง (A-Z)</span>
               </>
             )}
+          </button>
+        </div>
+
+        {/* Audio Mode Selection Bar (International Standard) */}
+        <div className="flex flex-wrap items-center gap-1.5 p-1.5 mb-3 bg-amber-50/80 rounded-2xl border border-amber-200 text-xs font-bold">
+          <span className="text-slate-600 px-2 font-thai">รูปแบบการออกเสียง:</span>
+          <button
+            type="button"
+            onClick={() => {
+              unlockAudio();
+              setChartSoundMode('sound');
+            }}
+            className={`px-3 py-1.5 rounded-xl transition ${
+              chartSoundMode === 'sound'
+                ? 'bg-amber-600 text-white shadow-2xs font-extrabold'
+                : 'bg-white text-slate-700 hover:bg-amber-100'
+            }`}
+          >
+            🔊 เสียงโฟนิกส์สากล (/æ/, /b/, /k/...)
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              unlockAudio();
+              setChartSoundMode('letter');
+            }}
+            className={`px-3 py-1.5 rounded-xl transition ${
+              chartSoundMode === 'letter'
+                ? 'bg-purple-600 text-white shadow-2xs font-extrabold'
+                : 'bg-white text-slate-700 hover:bg-purple-100'
+            }`}
+          >
+            🔤 ชื่อตัวอักษร A-Z (A, B, C, D...)
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              unlockAudio();
+              setChartSoundMode('anchor');
+            }}
+            className={`px-3 py-1.5 rounded-xl transition ${
+              chartSoundMode === 'anchor'
+                ? 'bg-emerald-600 text-white shadow-2xs font-extrabold'
+                : 'bg-white text-slate-700 hover:bg-emerald-100'
+            }`}
+          >
+            🍎 คำศัพท์หลัก (A as in apple...)
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              unlockAudio();
+              setChartSoundMode('thai');
+            }}
+            className={`px-3 py-1.5 rounded-xl transition ${
+              chartSoundMode === 'thai'
+                ? 'bg-sky-600 text-white shadow-2xs font-extrabold'
+                : 'bg-white text-slate-700 hover:bg-sky-100'
+            }`}
+          >
+            🇹🇭 เสียงครูไทย (แอ, บึ, คึ...)
           </button>
         </div>
 
